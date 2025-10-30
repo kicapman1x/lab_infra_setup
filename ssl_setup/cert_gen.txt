@@ -1,0 +1,22 @@
+1. take note make sure u have openssl
+2. generating private ca key: 
+    2a. openssl will ask for passphrase - to prevent any1 that gets priv key to gen root cert of their own.
+    2b. openssl genrsa -aes-128-cbc -out ca.key 2048 //aes is quite good. des and bf is outdated.
+3. generate root certificate
+    3a. will be prompted passphrase, key we generated in step #2, and bunch of questions (show up when looking at cert. cn is impt, put as root cert)
+    3b. openssl req -x509 -new -nodes -key ca.key -sha256 -days 1825 -out ca.pem // my cn going to be han.gg
+        Country Name (2 letter code) [AU]:SG
+        State or Province Name (full name) [Some-State]:SG
+        Locality Name (eg, city) []:SG
+        Organization Name (eg, company) [Internet Widgits Pty Ltd]:han ltd 
+        Organizational Unit Name (eg, section) []:ceo office 
+        Common Name (e.g. server FQDN or YOUR name) []:han.gg
+        Email Address []:xyz@abc.com
+4. then, for the website/application, you need a server key: 
+    4a. openssl genrsa -out han.gg.key 2048
+5. then, create CSR // same questions as previous lol.
+    5a. openssl req -new -key han.gg.key -out han.gg.csr
+6. create x509 v3 cert ext config file - to define SAN for the certificate (setting trust settings)
+    6a. create han.gg.ext
+7. run command to create certificate 
+    7a. openssl x509 -req -in han.gg.crs -CA ca.pem -CAkey -ca.key -CAcreateserial -out han.gg.crt -days 1825 -sha256 -extfile han.gg.ext

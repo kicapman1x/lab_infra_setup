@@ -1,0 +1,16 @@
+authorityKeyIdentifier=keyid,issuer
+basicConstraints=CA:FALSE
+keyUsage = digitalSignature, nonRepudiation, keyEncipherment, dataEncipherment
+subjectAltName = @alt_names
+
+[alt_names]
+DNS.1 = han.gg
+DNS.2 = influx.han.gg
+DNS.3 = grafana.han.gg
+DNS.4 = forgerock.han.gg
+DNS.5 = kibana.han.gg
+DNS.6 = osnode1.han.gg
+DNS.7 = osnode2.han.gg
+DNS.8 = osnode3.han.gg
+DNS.9 = web.han.gg
+DNS.10 = *.han.gg
