@@ -1,0 +1,4 @@
+1. Download bind and bind-utils
+2. Set up the dns server as shown (with named.conf and the db file)
+3. Set up the server using the dns server with resolv.conf
+4. Note that all files there the IP is internal local IP, dont just copy.

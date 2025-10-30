@@ -1,0 +1,15 @@
+$TTL 86400
+@    IN    SOA   ns1.han.gg. admin.han.gg. (
+            2025103001 ; Serial
+            3600       ; Refresh
+            1800       ; Retry
+            1209600    ; Expire
+            86400 )    ; Minimum TTL
+
+     IN    NS    ns1.han.gg.
+
+; A records for nameservers
+ns1  IN    A     100.105.27.109       ; Replace with DNS's IP
+
+; Wildcard record to resolve *.han.gg to a specific IP
+*    IN    A     100.75.9.6               ; Replace with the IP you want for all *.han.gg domains
