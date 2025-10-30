@@ -1,0 +1,4 @@
+dn: dc=han,dc=gg
+dc: han
+objectclass: domain
+objectclass: top

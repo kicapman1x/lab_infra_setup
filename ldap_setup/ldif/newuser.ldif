@@ -1,0 +1,9 @@
+dn: uid=daddy,dc=han,dc=gg
+objectClass: inetOrgPerson
+objectClass: organizationalPerson
+objectClass: person
+objectClass: top
+uid: daddy
+cn: Daddy
+sn: User
+userPassword: {password}

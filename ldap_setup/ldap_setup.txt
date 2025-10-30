@@ -1,0 +1,6 @@
+1. Download and unzip ApacheDS
+2. Download and unzip ApacheDS UI (studio) // i think abit useless, so im not gonna use LOOOOL 
+3. yay -S openldap // this is for the cli commands 
+4. edit partition 
+4. start and test
+5. change pw 
