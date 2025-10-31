@@ -1,5 +1,8 @@
 1. Download bind and bind-utils
 2. Set up the dns server as shown (with named.conf and the db file)
 3. Set up the server using the dns server with resolv.conf
-4. Note that all files there the IP is internal local IP, dont just copy.
-5. Note, if u using tailscale, dont allow it to manage ur dns for you - go and use: 'tailscale up --accept-dns=false'
+4. Depending on your OS, you may need to edit the nmcli config manually as well: 
+    4a. nmcli connection modify '${connection UUID}' ipv4.ignore-auto-dns yes
+    4b. nmcli connection modify 'f9f7dbe4-56f8-4f7b-9bf6-16e9c7c85d59' ipv4.dns "100.105.27.109 8.8.8.8 8.8.4.4"
+5. Note that all files there the IP is internal local IP, dont just copy.
+6. Note, if u using tailscale, dont allow it to manage ur dns for you - go and use: 'tailscale up --accept-dns=false'
