@@ -18,5 +18,4 @@ ldapsearch -H ldap://localhost:10389 -D "uid=admin,ou=system" -w "secret" -b "dc
 ldapmodify -H ldap://localhost:10389 -D "uid=admin,ou=system" -w "secret" -f change_password.ldif
 
 #add user
-
 ldapadd -H ldap://localhost:10389 -D "uid=admin,ou=system" -w "secret" -f daddy.ldif 

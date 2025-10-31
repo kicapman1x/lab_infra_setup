@@ -1,0 +1,4 @@
+dn: cn=big-kkj-onli,dc=han,dc=gg
+changetype: modify
+add: member
+member: uid=daddy,dc=han,dc=gg

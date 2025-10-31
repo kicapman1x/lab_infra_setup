@@ -1,0 +1,5 @@
+dn: cn=big-kkj-onli,dc=han,dc=gg
+objectClass: top
+objectClass: groupOfNames
+cn: big-kkj-onli
+member: uid=admin,ou=system
