@@ -1,4 +1,4 @@
-dn: cn=big-kkj-onli,dc=han,dc=gg
+dn: cn=big-kkj-onli,ou=gangs,dc=han,dc=gg
 objectClass: top
 objectClass: groupOfNames
 cn: big-kkj-onli

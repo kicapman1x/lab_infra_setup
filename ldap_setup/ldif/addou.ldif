@@ -1,0 +1,9 @@
+dn: ou=gangs,dc=han,dc=gg
+objectClass: top
+objectClass: organizationalUnit
+ou: gangs
+
+dn: ou=streetnibba,dc=han,dc=gg
+objectClass: top
+objectClass: organizationalUnit
+ou: streetnibba

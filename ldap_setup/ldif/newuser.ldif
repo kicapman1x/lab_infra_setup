@@ -1,4 +1,4 @@
-dn: uid=daddy,dc=han,dc=gg
+dn: uid=daddy,ou=streetnibba,dc=han,dc=gg
 objectClass: inetOrgPerson
 objectClass: organizationalPerson
 objectClass: person

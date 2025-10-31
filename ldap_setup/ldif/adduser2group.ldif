@@ -1,4 +1,4 @@
-dn: cn=big-kkj-onli,dc=han,dc=gg
+dn: cn=big-kkj-onli,ou=gangs,dc=han,dc=gg
 changetype: modify
 add: member
-member: uid=daddy,dc=han,dc=gg
+member: uid=daddy,ou=streetnibba,dc=han,dc=gg
