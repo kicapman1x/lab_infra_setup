@@ -4,7 +4,7 @@
 #Applications tracked
 VALID_APPLICATIONS=("influxdb" "kafka" "infra" "msql" "neo4j" "ollama" "opensearch" "rabbitmq" "zookeeper")
 VALID_DEPLOYMENT_ACTIONS=("deploy" "rollback")
-VERSION=uuidgen
+VERSION=$(uuidgen)
 GIT_BASE_URL="https://raw.githubusercontent.com/kicapman1x"
 RETENTION_CYCLES=3
 
@@ -70,11 +70,20 @@ influxdb_rollback() {
 #Back up existing deployment if it exists
 influxdb_backup() {
   BACKUP_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$VERSION"
-  mkdir -rp "$BACKUP_DIR"
+  mkdir -p "$BACKUP_DIR"
   cp -r "$INFLUX_HOME/data/influxdbv2/influx.conf" "$BACKUP_DIR/"
   cp -r "$GRF_HOME/conf/grafana.ini" "$BACKUP_DIR/"
   cp -r "$GRF_HOME/conf/ldap.toml" "$BACKUP_DIR/"
   cp -r "$TELEGRAF_HOME/etc/telegraf/telegraf.conf" "$BACKUP_DIR/"
+  echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
+}
+
+kafka_backup() {
+  BACKUP_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$VERSION"
+  mkdir -p "$BACKUP_DIR"
+  cp -r "$KAFKA_HOME/config/server.properties" "$BACKUP_DIR/"
+  cp -r "$KAFKA_HOME/config/ssl-client.properties" "$BACKUP_DIR/"
+  cp -r "$HOME/apps/kafka/publisher" "$BACKUP_DIR/"
   echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
 }
 
@@ -97,7 +106,7 @@ influxdb_deploy() {
 cleanup_backups() {
   BACKUP_PATH="$HOME/apps/backups/${APPLICATION_NAME}/"
   cd "$BACKUP_PATH" || { echo "Error: Cannot access backup directory."; exit 1; }
-  BACKUP_VERSIONS=($(ls -dt */))
+  BACKUP_VERSIONS=($(ls -t .))
   COUNT=${#BACKUP_VERSIONS[@]}  
   if [ $COUNT -gt $RETENTION_CYCLES ]; then
     echo "Cleaning up old backups..."
@@ -120,6 +129,7 @@ elif [ "$APPLICATION_NAME" == "influxdb" ] && [ "$DEPLOY_ROLLBACK" == "rollback"
 #kafka deployment with backup and rollback
 elif [ "$APPLICATION_NAME" == "kafka" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
   echo "Deploying Kafka..."
+  kafka_backup
 elif [ "$APPLICATION_NAME" == "kafka" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
   echo "Rolling back Kafka..."
 elif [ "$APPLICATION_NAME" == "infra" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
