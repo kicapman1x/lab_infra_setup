@@ -67,6 +67,15 @@ influxdb_rollback() {
   echo "InfluxDB rollback to version $ROLLBACK_VERSION completed."
 }
 
+kafka_rollback() {
+  echo "Rolling back Kafka to previous version..."
+  VERSION_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$ROLLBACK_VERSION"
+  cp -r "$VERSION_DIR/server.properties" "$KAFKA_HOME/config/"
+  cp -r "$VERSION_DIR/ssl-client.properties" "$KAFKA_HOME/config/"
+  cp -r "$VERSION_DIR/publisher" "$HOME/apps/kafka/"
+  echo "Kafka rollback to version $ROLLBACK_VERSION completed."
+}
+
 #Back up existing deployment if it exists
 influxdb_backup() {
   BACKUP_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$VERSION"
@@ -87,7 +96,7 @@ kafka_backup() {
   echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
 }
 
-#Deploy InfluxDB
+#Deploy
 influxdb_deploy() {
   echo "Starting InfluxDB deployment..."
   INFLUX_REPO="$GIT_BASE_URL/influxdb-setup/refs/heads/main"
@@ -100,6 +109,34 @@ influxdb_deploy() {
   curl -fsSL -o $HOME/apps/tmp/telegraf.conf "$INFLUX_REPO/telegraf.conf" && [ -s "$HOME/apps/tmp/telegraf.conf" ] || { echo "Error: Failed to download telegraf.conf or file is empty."; exit 1; }
   mv $HOME/apps/tmp/telegraf.conf $TELEGRAF_HOME/etc/telegraf/telegraf.conf
   echo "InfluxDB deployment completed."
+}
+
+kafka_deploy() {
+  echo "Starting Kafka deployment..."
+  KAFKA_REPO="$GIT_BASE_URL/kafka-setup/refs/heads/main"
+  curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/server.properties "$KAFKA_REPO/server.properties" && [ -s "$HOME/apps/tmp/server.properties" ] || { echo "Error: Failed to download server.properties or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/server.properties $KAFKA_HOME/config/server.properties
+  curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/ssl-client.properties "$KAFKA_REPO/ssl-client.properties" && [ -s "$HOME/apps/tmp/ssl-client.properties" ] || { echo "Error: Failed to download ssl-client.properties or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/ssl-client.properties $KAFKA_HOME/config/ssl-client.properties\
+  #Publisher deployment
+  #bin files
+  mkdir -p $HOME/apps/tmp/bin
+  curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/publisher/bin/.env "$KAFKA_REPO/publisher/bin/.env" && [ -s "$HOME/apps/tmp/publisher/bin/.env" ] || { echo "Error: Failed to download .env or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/publisher/bin/.env $HOME/apps/kafka/publisher/bin/.env
+  curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/publisher/bin/publisher.py "$KAFKA_REPO/publisher/bin/publisher.py" && [ -s "$HOME/apps/tmp/publisher/bin/publisher.py" ] || { echo "Error: Failed to download publisher.py or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/publisher/bin/publisher.py $HOME/apps/kafka/publisher/bin/publisher.py
+  curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/publisher/bin/requirements.txt "$KAFKA_REPO/publisher/bin/requirements.txt" && [ -s "$HOME/apps/tmp/publisher/bin/requirements.txt" ] || { echo "Error: Failed to download requirements.txt or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/publisher/bin/requirements.txt $HOME/apps/kafka/publisher/bin/requirements.txt
+  curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/publisher/bin/start.sh "$KAFKA_REPO/publisher/bin/start.sh" && [ -s "$HOME/apps/tmp/publisher/bin/start.sh" ] || { echo "Error: Failed to download start.sh or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/publisher/bin/start.sh $HOME/apps/kafka/publisher/bin/start.sh
+  chmod +x $HOME/apps/kafka/publisher/bin/start.sh
+  #config files
+  mkdir -p $HOME/apps/tmp/publisher/config
+  for i in {1..40}; do
+    curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/publisher/config/dev{$i}_config_update.json "$KAFKA_REPO/publisher/config/dev{$i}_config_update.json" && [ -s "$HOME/apps/tmp/publisher/config/dev{$i}_config_update.json" ] || { echo "Error: Failed to download dev{$i}_config_update.json or file is empty."; exit 1; }
+    mv $HOME/apps/tmp/publisher/config/dev{$i}_config_update.json $HOME/apps/kafka/publisher/config/dev{$i}_config_update.json
+  done
+  echo "Kafka deployment completed."
 }
 
 #backup retention cleanup
@@ -128,10 +165,13 @@ elif [ "$APPLICATION_NAME" == "influxdb" ] && [ "$DEPLOY_ROLLBACK" == "rollback"
   influxdb_rollback
 #kafka deployment with backup and rollback
 elif [ "$APPLICATION_NAME" == "kafka" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
-  echo "Deploying Kafka..."
+  echo "Backup Kafka..."
   kafka_backup
+  echo "Deploying Kafka..."
+  kafka_deploy
 elif [ "$APPLICATION_NAME" == "kafka" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
   echo "Rolling back Kafka..."
+  kafka_rollback
 elif [ "$APPLICATION_NAME" == "infra" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
   echo "Deploying Infra..."
 elif [ "$APPLICATION_NAME" == "infra" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
