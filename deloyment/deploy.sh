@@ -6,6 +6,7 @@ VALID_APPLICATIONS=("influxdb" "kafka" "infra" "msql" "neo4j" "ollama" "opensear
 VALID_DEPLOYMENT_ACTIONS=("deploy" "rollback")
 VERSION=uuidgen
 GIT_BASE_URL="https://raw.githubusercontent.com/kicapman1x"
+RETENTION_CYCLES=3
 
 print_help() {
   echo "Usage: $0 <application_name> <deploy|rollback> <rollback_version - if applicable>"
@@ -92,6 +93,20 @@ influxdb_deploy() {
   echo "InfluxDB deployment completed."
 }
 
+#backup retention cleanup
+cleanup_backups() {
+  BACKUP_PATH="$HOME/apps/backups/${APPLICATION_NAME}/"
+  cd "$BACKUP_PATH" || { echo "Error: Cannot access backup directory."; exit 1; }
+  BACKUP_VERSIONS=($(ls -dt */))
+  COUNT=${#BACKUP_VERSIONS[@]}  
+  if [ $COUNT -gt $RETENTION_CYCLES ]; then
+    echo "Cleaning up old backups..."
+    for ((i=RETENTION_CYCLES; i<COUNT; i++)); do
+      rm -rf "${BACKUP_VERSIONS[i]}"
+    done
+  fi
+}
+
 #Main Deployment Logic 
 #influxdb deployment with backup and rollback
 if [ "$APPLICATION_NAME" == "influxdb" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
@@ -139,3 +154,4 @@ else
   echo "Error: Deployment logic for $APPLICATION_NAME is not implemented."
   exit 1
 fi
+cleanup_backups
