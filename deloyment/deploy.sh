@@ -1,13 +1,14 @@
 #!/bin/bash
 #Deployment script for homelab
 
-#Applications tracked
+#Setting environment variables
 VALID_APPLICATIONS=("influxdb" "kafka" "infra" "msql" "neo4j" "ollama" "opensearch" "rabbitmq" "zookeeper")
 VALID_DEPLOYMENT_ACTIONS=("deploy" "rollback")
 VERSION=$(uuidgen)
 GIT_BASE_URL="https://raw.githubusercontent.com/kicapman1x"
 RETENTION_CYCLES=3
 
+#Help function
 print_help() {
   echo "Usage: $0 <application_name> <deploy|rollback> <rollback_version - if applicable>"
   echo "Deploy/rollback the specified application to Han's Homelab environment."
@@ -38,7 +39,7 @@ if [ -z "$DEPLOY_ROLLBACK" ]; then
   exit 1
 fi
 
-# Validate parameters
+#Validate parameters
 if [[ ! " ${VALID_APPLICATIONS[*]} " =~ " ${APPLICATION_NAME} " ]]; then
   echo "Error: Invalid application name."
   print_help
@@ -57,6 +58,7 @@ if [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
   fi
 fi
 
+#Functions for deployment, backup, and rollback
 #Rollback 
 influxdb_rollback() {
   echo "Rolling back InfluxDB to previous version..."
@@ -74,6 +76,16 @@ kafka_rollback() {
   cp -r "$VERSION_DIR/ssl-client.properties" "$KAFKA_HOME/config/"
   cp -r "$VERSION_DIR/publisher" "$HOME/apps/kafka/"
   echo "Kafka rollback to version $ROLLBACK_VERSION completed."
+}
+
+mysql_rollback() {
+  echo "Rolling back MySQL to previous version..."
+  VERSION_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$ROLLBACK_VERSION"
+  cp -r "$VERSION_DIR/db1/my.cnf" "$MSQL_DB1_HOME/config/my.cnf"
+  cp -r "$VERSION_DIR/db1/start.sh" "$MSQL_HOME/db1/bin/start.sh"
+  cp -r "$VERSION_DIR/db2/my.cnf" "$MSQL_DB2_HOME/config/my.cnf"
+  cp -r "$VERSION_DIR/db2/start.sh" "$MSQL_HOME/db2/bin/start.sh"
+  echo "MySQL rollback to version $ROLLBACK_VERSION completed."
 }
 
 #Back up existing deployment if it exists
@@ -96,6 +108,18 @@ kafka_backup() {
   echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
 }
 
+mysql_backup() {
+  BACKUP_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$VERSION"
+  mkdir -p "$BACKUP_DIR"
+  mkdir -p "$BACKUP_DIR/db1"
+  cp -r "$MSQL_DB1_HOME/config/my.cnf" "$BACKUP_DIR/db1/my.cnf"
+  cp -r "$MSQL_HOME/db1/bin/start.sh" "$BACKUP_DIR/db1/start.sh"
+  mkdir -p "$BACKUP_DIR/db2"
+  cp -r "$MSQL_DB2_HOME/config/my.cnf" "$BACKUP_DIR/db2/my.cnf"
+  cp -r "$MSQL_HOME/db2/bin/start.sh" "$BACKUP_DIR/db2/start.sh"
+  echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
+}
+
 #Deploy
 influxdb_deploy() {
   echo "Starting InfluxDB deployment..."
@@ -112,6 +136,7 @@ influxdb_deploy() {
 }
 
 kafka_deploy() {
+  #Kafka deployment requires Auth token to access private repo
   echo "Starting Kafka deployment..."
   KAFKA_REPO="$GIT_BASE_URL/kafka-setup/refs/heads/main"
   curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/server.properties "$KAFKA_REPO/server.properties" && [ -s "$HOME/apps/tmp/server.properties" ] || { echo "Error: Failed to download server.properties or file is empty."; exit 1; }
@@ -139,8 +164,29 @@ kafka_deploy() {
   echo "Kafka deployment completed."
 }
 
-#backup retention cleanup
-cleanup_backups() {
+mysql_deploy() {
+  echo "Starting MySQL deployment..."
+  MSQL_REPO="$GIT_BASE_URL/mysql-setup/refs/heads/main"
+  #DB1
+  mkdir -p $HOME/apps/tmp/db1
+  curl -fsSL -o $HOME/apps/tmp/db1/my.cnf "$MSQL_REPO/db1/my.cnf" && [ -s "$HOME/apps/tmp/db1/my.cnf" ] || { echo "Error: Failed to download my.cnf for DB1 or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/db1/my.cnf $MSQL_DB1_HOME/config/my.cnf
+  curl -fsSL -o $HOME/apps/tmp/db1/start.sh "$MSQL_REPO/db1/start.sh" && [ -s "$HOME/apps/tmp/db1/start.sh" ] || { echo "Error: Failed to download start.sh for DB1 or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/db1/start.sh $MSQL_HOME/db1/bin/start.sh
+  chmod +x $MSQL_HOME/db1/bin/start.sh
+  #DB2
+  mkdir -p $HOME/apps/tmp/db2
+  curl -fsSL -o $HOME/apps/tmp/db2/my.cnf "$MSQL_REPO/db2/my.cnf" && [ -s "$HOME/apps/tmp/db2/my.cnf" ] || { echo "Error: Failed to download my.cnf for DB2 or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/db2/my.cnf $MSQL_DB2_HOME/config/my.cnf
+  curl -fsSL -o $HOME/apps/tmp/db2/start.sh "$MSQL_REPO/db2/start.sh" && [ -s "$HOME/apps/tmp/db2/start.sh" ] || { echo "Error: Failed to download start.sh for DB2 or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/db2/start.sh $MSQL_HOME/db2/bin/start.sh
+  chmod +x $MSQL_HOME/db2/bin/start.sh
+  echo "MySQL deployment completed."
+}
+
+#cleanup
+cleanup() {
+  #cleanup old backups
   BACKUP_PATH="$HOME/apps/backups/${APPLICATION_NAME}/"
   cd "$BACKUP_PATH" || { echo "Error: Cannot access backup directory."; exit 1; }
   BACKUP_VERSIONS=($(ls -t .))
@@ -151,6 +197,9 @@ cleanup_backups() {
       rm -rf "${BACKUP_VERSIONS[i]}"
     done
   fi
+  #cleanup temp files
+  echo "Cleaning up temporary files..."
+  rm -rf $HOME/apps/tmp/*
 }
 
 #Main Deployment Logic 
@@ -177,9 +226,13 @@ elif [ "$APPLICATION_NAME" == "infra" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; t
 elif [ "$APPLICATION_NAME" == "infra" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
   echo "Rolling back Infra..."
 elif [ "$APPLICATION_NAME" == "msql" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
+  echo "Backup MySQL..."
+  msql_backup
   echo "Deploying MySQL..."
+  mysql_deploy
 elif [ "$APPLICATION_NAME" == "msql" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
   echo "Rolling back MySQL..."
+  mysql_rollback
 elif [ "$APPLICATION_NAME" == "neo4j" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
   echo "Deploying Neo4j..."
 elif [ "$APPLICATION_NAME" == "neo4j" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
@@ -204,4 +257,5 @@ else
   echo "Error: Deployment logic for $APPLICATION_NAME is not implemented."
   exit 1
 fi
-cleanup_backups
+cleanup
+echo "Deployment script completed successfully."
