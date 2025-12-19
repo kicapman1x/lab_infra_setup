@@ -58,6 +58,22 @@ if [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
   fi
 fi
 
+#Helper functions
+retrieve_pw( secret_file, ori_file, key, placeholder, delimiter ) {
+  if [ -f "$secret_file" ]; then
+    SECRET_VALUE=$(cat "$secret_file" | grep -i $key | cut -d "$delimiter" -f2)
+    if [ -n "$SECRET_VALUE" ]; then
+      sed -i "s/${placeholder}/${SECRET_VALUE}/g" "$ori_file"
+    else
+      echo "Error: Key $key not found in secret file $secret_file."
+      exit 1
+    fi
+  else
+    echo "Error: Secret file $secret_file not found."
+    exit 1
+  fi
+}
+
 #Functions for deployment, backup, and rollback
 #Rollback 
 influxdb_rollback() {
@@ -86,6 +102,18 @@ mysql_rollback() {
   cp -r "$VERSION_DIR/db2/my.cnf" "$MSQL_DB2_HOME/config/my.cnf"
   cp -r "$VERSION_DIR/db2/start.sh" "$MSQL_HOME/db2/bin/start.sh"
   echo "MySQL rollback to version $ROLLBACK_VERSION completed."
+}
+
+neo4j_rollback() {
+  echo "Rolling back Neo4j to previous version..."
+  VERSION_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$ROLLBACK_VERSION"
+  cp -r "$VERSION_DIR/neo4j.conf" "$NEO4J_HOME/conf/"
+  cp -r "$VERSION_DIR/.env" "$NEO4J_HOME/../bin/.env"
+  cp -r "$VERSION_DIR/start.sh" "$NEO4J_HOME/../bin/start.sh"
+  cp -r "$VERSION_DIR/requirements.txt" "$NEO4J_HOME/../bin/requirements.txt"
+  cp -r "$VERSION_DIR/knowledge_ingest.py" "$NEO4J_HOME/../bin/knowledge_ingest.py"
+  cp -r "$VERSION_DIR/knowledge_query.py" "$NEO4J_HOME/../bin/knowledge_query.py"
+  echo "Neo4j rollback to version $ROLLBACK_VERSION completed."
 }
 
 #Back up existing deployment if it exists
@@ -117,6 +145,18 @@ mysql_backup() {
   mkdir -p "$BACKUP_DIR/db2"
   cp -r "$MSQL_DB2_HOME/config/my.cnf" "$BACKUP_DIR/db2/my.cnf"
   cp -r "$MSQL_HOME/db2/bin/start.sh" "$BACKUP_DIR/db2/start.sh"
+  echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
+}
+
+neo4j_backup() {
+  BACKUP_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$VERSION"
+  mkdir -p "$BACKUP_DIR"
+  cp -r "$NEO4J_HOME/conf/neo4j.conf" "$BACKUP_DIR/"
+  cp -r "$NEO4J_HOME/../bin/.env" "$BACKUP_DIR/"
+  cp -r "$NEO4J_HOME/../bin/start.sh" "$BACKUP_DIR/"
+  cp -r "$NEO4J_HOME/../bin/requirements.txt" "$BACKUP_DIR/"
+  cp -r "$NEO4J_HOME/../bin/knowledge_ingest.py" "$BACKUP_DIR/"
+  cp -r "$NEO4J_HOME/../bin/knowledge_query.py" "$BACKUP_DIR/"
   echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
 }
 
@@ -184,6 +224,38 @@ mysql_deploy() {
   echo "MySQL deployment completed."
 }
 
+neo4j_deploy() {
+  echo "Starting Neo4j deployment..."
+  NEO4J_REPO="$GIT_BASE_URL/neo4j-setup/refs/heads/main"
+  #env file of graphrag application
+  curl -fsSL -o $HOME/apps/tmp/.env "$NEO4J_REPO/.env" && [ -s "$HOME/apps/tmp/.env" ] || { echo "Error: Failed to download .env or file is empty."; exit 1; }
+  #retrieve passwords from secrets file and update .env
+  retrieve_pw( "$SECRETS_DIR/openai_token", "$HOME/apps/tmp/.env", "openai_api_placeholder", "openai_token", "=" )
+  retrieve_pw( "$SECRETS_DIR/neo4j", "$HOME/apps/tmp/.env", "neo4j_password_placeholder", "neo4j-password", ":" )
+  echo "Passwords retrieved and .env file updated."
+  cat $HOME/apps/tmp/.env
+  #move edited .env to neo4j conf directory
+  mv $HOME/apps/tmp/.env $NEO4J_HOME/../bin/.env
+  #graphrag application deployment
+  curl -fsSL -o $HOME/apps/tmp/knowledge_ingest.py "$NEO4J_REPO/knowledge_ingest.py" && [ -s "$HOME/apps/tmp/knowledge_ingest.py" ] || { echo "Error: Failed to download knowledge_ingest.py or file is empty."; exit 1; }
+  curl -fsSL -o $HOME/apps/tmp/knowledge_query.py "$NEO4J_REPO/knowledge_query.py" && [ -s "$HOME/apps/tmp/knowledge_query.py" ] || { echo "Error: Failed to download knowledge_query.py or file is empty."; exit 1; }
+  curl -fsSL -o $HOME/apps/tmp/requirements.txt "$NEO4J_REPO/requirements.txt" && [ -s "$HOME/apps/tmp/requirements.txt" ] || { echo "Error: Failed to download requirements.txt or file is empty."; exit 1; }
+  curl -fsSL -o $HOME/apps/tmp/start.sh "$NEO4J_REPO/start.sh" && [ -s "$HOME/apps/tmp/start.sh" ] || { echo "Error: Failed to download start.sh or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/start.sh $NEO4J_HOME/../bin/start.sh
+  mv $HOME/apps/tmp/requirements.txt $NEO4J_HOME/../bin/requirements.txt
+  mv $HOME/apps/tmp/knowledge_ingest.py $NEO4J_HOME/../bin/knowledge_ingest.py
+  mv $HOME/apps/tmp/knowledge_query.py $NEO4J_HOME/../bin/knowledge_query.py
+  chmod +x $NEO4J_HOME/../bin/start.sh
+  chmod +x $NEO4J_HOME/../bin/knowledge_ingest.py
+  chmod +x $NEO4J_HOME/../bin/knowledge_query.py
+  echo "Graphrag application deployment completed."
+  #neo4j.conf deployment
+  curl -fsSL -o $HOME/apps/tmp/neo4j.conf "$NEO4J_REPO/neo4j.conf" && [ -s "$HOME/apps/tmp/neo4j.conf" ] || { echo "Error: Failed to download neo4j.conf or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/neo4j.conf $NEO4J_HOME/conf/neo4j.conf
+  echo "neo4j.conf deployed."
+  echo "Neo4j deployment completed."
+}
+
 #cleanup
 cleanup() {
   #cleanup old backups
@@ -234,9 +306,13 @@ elif [ "$APPLICATION_NAME" == "msql" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; 
   echo "Rolling back MySQL..."
   mysql_rollback
 elif [ "$APPLICATION_NAME" == "neo4j" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
+  echo "Backup Neo4j..."
+  neo4j_backup
   echo "Deploying Neo4j..."
+  neo4j_deploy
 elif [ "$APPLICATION_NAME" == "neo4j" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
   echo "Rolling back Neo4j..."
+  neo4j_rollback
 elif [ "$APPLICATION_NAME" == "ollama" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
   echo "Deploying Ollama..."
 elif [ "$APPLICATION_NAME" == "ollama" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
