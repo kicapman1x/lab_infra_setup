@@ -116,6 +116,13 @@ neo4j_rollback() {
   echo "Neo4j rollback to version $ROLLBACK_VERSION completed."
 }
 
+rabbitmq_rollback() {
+  echo "Rolling back RabbitMQ to previous version..."
+  VERSION_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$ROLLBACK_VERSION"
+  cp -r "$VERSION_DIR/rabbitmq.conf" "$RABBITMQ_HOME/etc/rabbitmq/rabbitmq.conf"
+  echo "RabbitMQ rollback to version $ROLLBACK_VERSION completed."
+}
+
 #Back up existing deployment if it exists
 influxdb_backup() {
   BACKUP_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$VERSION"
@@ -157,6 +164,13 @@ neo4j_backup() {
   cp -r "$NEO4J_HOME/../bin/requirements.txt" "$BACKUP_DIR/"
   cp -r "$NEO4J_HOME/../bin/knowledge_ingest.py" "$BACKUP_DIR/"
   cp -r "$NEO4J_HOME/../bin/knowledge_query.py" "$BACKUP_DIR/"
+  echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
+}
+
+rabbitmq_backup() {
+  BACKUP_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$VERSION"
+  mkdir -p "$BACKUP_DIR"
+  cp -r "$RABBITMQ_HOME/etc/rabbitmq/rabbitmq.conf" "$BACKUP_DIR/"
   echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
 }
 
@@ -256,6 +270,17 @@ neo4j_deploy() {
   echo "Neo4j deployment completed."
 }
 
+rabbitmq_deploy() {
+  echo "Starting RabbitMQ deployment..."
+  #deploy rabbitmq.conf
+  RABBITMQ_REPO="$GIT_BASE_URL/rabbitmq-setup/refs/heads/main"
+  curl -fsSL -o $HOME/apps/tmp/rabbitmq.conf "$RABBITMQ_REPO/rabbitmq.conf" && [ -s "$HOME/apps/tmp/rabbitmq.conf" ] || { echo "Error: Failed to download rabbitmq.conf or file is empty."; exit 1; }
+  #retrieve passwords from secrets file and update rabbitmq.conf
+  retrieve_pw( "$SECRETS_DIR/rabbitmq_cred", "$HOME/apps/tmp/rabbitmq.conf", "rabbitmq_password_placeholder" ,"rabbitmq_password", "=" )
+  mv $HOME/apps/tmp/rabbitmq.conf $RABBITMQ_HOME/etc/rabbitmq/rabbitmq.conf
+  echo "RabbitMQ deployment completed."
+}
+
 #cleanup
 cleanup() {
   #cleanup old backups
@@ -322,7 +347,10 @@ elif [ "$APPLICATION_NAME" == "opensearch" ] && [ "$DEPLOY_ROLLBACK" == "deploy"
 elif [ "$APPLICATION_NAME" == "opensearch" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
   echo "Rolling back OpenSearch..."
 elif [ "$APPLICATION_NAME" == "rabbitmq" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
+  echo "Backup RabbitMQ..."
+  rabbitmq_backup
   echo "Deploying RabbitMQ..."
+  rabbitmq_deploy
 elif [ "$APPLICATION_NAME" == "rabbitmq" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
   echo "Rolling back RabbitMQ..."
 elif [ "$APPLICATION_NAME" == "zookeeper" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
