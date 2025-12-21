@@ -59,7 +59,13 @@ if [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
 fi
 
 #Helper functions
-retrieve_pw( secret_file, ori_file, key, placeholder, delimiter ) {
+retrieve_pw() {
+  local secret_file="$1"
+  local ori_file="$2"
+  local key="$3"
+  local placeholder="$4"
+  local delimiter="$5"
+
   if [ -f "$secret_file" ]; then
     SECRET_VALUE=$(cat "$secret_file" | grep -i $key | cut -d "$delimiter" -f2)
     if [ -n "$SECRET_VALUE" ]; then
@@ -244,8 +250,8 @@ neo4j_deploy() {
   #env file of graphrag application
   curl -fsSL -o $HOME/apps/tmp/.env "$NEO4J_REPO/.env" && [ -s "$HOME/apps/tmp/.env" ] || { echo "Error: Failed to download .env or file is empty."; exit 1; }
   #retrieve passwords from secrets file and update .env
-  retrieve_pw( "$SECRETS_DIR/openai_token", "$HOME/apps/tmp/.env", "openai_api_placeholder", "openai_token", "=" )
-  retrieve_pw( "$SECRETS_DIR/neo4j", "$HOME/apps/tmp/.env", "neo4j_password_placeholder", "neo4j-password", ":" )
+  retrieve_pw "$SECRETS_DIR/openai_token" "$HOME/apps/tmp/.env" "openai_api_placeholder" "openai_token" "="
+  retrieve_pw "$SECRETS_DIR/neo4j" "$HOME/apps/tmp/.env" "neo4j_password_placeholder" "neo4j-password" ":" 
   echo "Passwords retrieved and .env file updated."
   cat $HOME/apps/tmp/.env
   #move edited .env to neo4j conf directory
@@ -276,7 +282,7 @@ rabbitmq_deploy() {
   RABBITMQ_REPO="$GIT_BASE_URL/rabbitmq-setup/refs/heads/main"
   curl -fsSL -o $HOME/apps/tmp/rabbitmq.conf "$RABBITMQ_REPO/rabbitmq.conf" && [ -s "$HOME/apps/tmp/rabbitmq.conf" ] || { echo "Error: Failed to download rabbitmq.conf or file is empty."; exit 1; }
   #retrieve passwords from secrets file and update rabbitmq.conf
-  retrieve_pw( "$SECRETS_DIR/rabbitmq_cred", "$HOME/apps/tmp/rabbitmq.conf", "rabbitmq_password_placeholder" ,"rabbitmq_password", "=" )
+  retrieve_pw "$SECRETS_DIR/rabbitmq_cred" "$HOME/apps/tmp/rabbitmq.conf" "rabbitmq_password" "rabbitmq_password_placeholder" "="
   mv $HOME/apps/tmp/rabbitmq.conf $RABBITMQ_HOME/etc/rabbitmq/rabbitmq.conf
   echo "RabbitMQ deployment completed."
 }
