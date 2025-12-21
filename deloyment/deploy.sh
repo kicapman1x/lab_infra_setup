@@ -2,7 +2,7 @@
 #Deployment script for homelab
 
 #Setting environment variables
-VALID_APPLICATIONS=("influxdb" "kafka" "infra" "msql" "neo4j" "ollama" "opensearch" "rabbitmq" "zookeeper")
+VALID_APPLICATIONS=("influxdb" "kafka" "infra" "msql" "neo4j" "ollama" "opensearch" "rabbitmq" "zookeeper" "load-generator")
 VALID_DEPLOYMENT_ACTIONS=("deploy" "rollback")
 VERSION=$(uuidgen)
 GIT_BASE_URL="https://raw.githubusercontent.com/kicapman1x"
@@ -363,6 +363,10 @@ elif [ "$APPLICATION_NAME" == "zookeeper" ] && [ "$DEPLOY_ROLLBACK" == "deploy" 
   echo "Deploying Zookeeper..."
 elif [ "$APPLICATION_NAME" == "zookeeper" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
   echo "Rolling back Zookeeper..."
+elif [ "$APPLICATION_NAME" == "load-generator" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
+  echo "Deploying load-generator..."
+elif [ "$APPLICATION_NAME" == "load-generator" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
+  echo "Rolling back load-generator..."
 else
   echo "Error: Deployment logic for $APPLICATION_NAME is not implemented."
   exit 1
