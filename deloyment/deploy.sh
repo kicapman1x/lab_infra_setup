@@ -205,11 +205,11 @@ kafka_deploy() {
   mv $HOME/apps/tmp/ssl-client.properties $KAFKA_HOME/config/ssl-client.properties\
   #Publisher deployment
   #bin files
-  mkdir -p $HOME/apps/tmp/bin
+  mkdir -p $HOME/apps/tmp/publisher/bin
   curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/publisher/bin/.env "$KAFKA_REPO/publisher/bin/.env" && [ -s "$HOME/apps/tmp/publisher/bin/.env" ] || { echo "Error: Failed to download .env or file is empty."; exit 1; }
   mv $HOME/apps/tmp/publisher/bin/.env $HOME/apps/kafka/publisher/bin/.env
-  curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/publisher/bin/publisher.py "$KAFKA_REPO/publisher/bin/publisher.py" && [ -s "$HOME/apps/tmp/publisher/bin/publisher.py" ] || { echo "Error: Failed to download publisher.py or file is empty."; exit 1; }
-  mv $HOME/apps/tmp/publisher/bin/publisher.py $HOME/apps/kafka/publisher/bin/publisher.py
+  curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/publisher/bin/publish.py "$KAFKA_REPO/publisher/bin/publish.py" && [ -s "$HOME/apps/tmp/publisher/bin/publish.py" ] || { echo "Error: Failed to download publish.py or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/publisher/bin/publish.py $HOME/apps/kafka/publisher/bin/publish.py
   curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/publisher/bin/requirements.txt "$KAFKA_REPO/publisher/bin/requirements.txt" && [ -s "$HOME/apps/tmp/publisher/bin/requirements.txt" ] || { echo "Error: Failed to download requirements.txt or file is empty."; exit 1; }
   mv $HOME/apps/tmp/publisher/bin/requirements.txt $HOME/apps/kafka/publisher/bin/requirements.txt
   curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/publisher/bin/start.sh "$KAFKA_REPO/publisher/bin/start.sh" && [ -s "$HOME/apps/tmp/publisher/bin/start.sh" ] || { echo "Error: Failed to download start.sh or file is empty."; exit 1; }
@@ -218,8 +218,8 @@ kafka_deploy() {
   #config files
   mkdir -p $HOME/apps/tmp/publisher/config
   for i in {1..40}; do
-    curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/publisher/config/dev{$i}_config_update.json "$KAFKA_REPO/publisher/config/dev{$i}_config_update.json" && [ -s "$HOME/apps/tmp/publisher/config/dev{$i}_config_update.json" ] || { echo "Error: Failed to download dev{$i}_config_update.json or file is empty."; exit 1; }
-    mv $HOME/apps/tmp/publisher/config/dev{$i}_config_update.json $HOME/apps/kafka/publisher/config/dev{$i}_config_update.json
+    curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/publisher/config/dev${i}_config_update.json "$KAFKA_REPO/publisher/config/dev${i}_config_update.json" && [ -s "$HOME/apps/tmp/publisher/config/dev${i}_config_update.json" ] || { echo "Error: Failed to download dev${i}_config_update.json or file is empty."; exit 1; }
+    mv $HOME/apps/tmp/publisher/config/dev${i}_config_update.json $HOME/apps/kafka/publisher/config/dev${i}_config_update.json
   done
   echo "Kafka deployment completed."
 }
