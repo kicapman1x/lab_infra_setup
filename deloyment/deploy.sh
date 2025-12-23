@@ -129,6 +129,17 @@ rabbitmq_rollback() {
   echo "RabbitMQ rollback to version $ROLLBACK_VERSION completed."
 }
 
+load_generator_rollback() {
+  echo "Rolling back Load-Generator to previous version..."
+  VERSION_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$ROLLBACK_VERSION"
+  cp -r "$VERSION_DIR/.env" "$LOAD_GEN_HOME/bin/.env"
+  cp -r "$VERSION_DIR/requirements.txt" "$LOAD_GEN_HOME/bin/requirements.txt"
+  cp -r "$VERSION_DIR/start.sh" "$LOAD_GEN_HOME/bin/start.sh"
+  cp -r "$VERSION_DIR/source-data-interface.py" "$LOAD_GEN_HOME/bin/source-data-interface.py"
+  cp -r "$VERSION_DIR/passenger-svc.py" "$LOAD_GEN_HOME/bin/passenger-svc.py"
+  echo "Load-Generator rollback to version $ROLLBACK_VERSION completed."
+}
+
 #Back up existing deployment if it exists
 influxdb_backup() {
   BACKUP_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$VERSION"
@@ -177,6 +188,17 @@ rabbitmq_backup() {
   BACKUP_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$VERSION"
   mkdir -p "$BACKUP_DIR"
   cp -r "$RABBITMQ_HOME/etc/rabbitmq/rabbitmq.conf" "$BACKUP_DIR/"
+  echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
+}
+
+load_generator_backup() {
+  BACKUP_DIR="$HOME/apps/backups/${APPLICATION_NAME}/$VERSION"
+  mkdir -p "$BACKUP_DIR"
+  cp -r "$LOAD_GEN_HOME/bin/.env" "$BACKUP_DIR/"
+  cp -r "$LOAD_GEN_HOME/bin/requirements.txt" "$BACKUP_DIR/"
+  cp -r "$LOAD_GEN_HOME/bin/start.sh" "$BACKUP_DIR/"
+  cp -r "$LOAD_GEN_HOME/bin/source-data-interface.py" "$BACKUP_DIR/"
+  cp -r "$LOAD_GEN_HOME/bin/passenger-svc.py" "$BACKUP_DIR/"
   echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
 }
 
@@ -287,6 +309,32 @@ rabbitmq_deploy() {
   echo "RabbitMQ deployment completed."
 }
 
+load_generator_deploy() {
+  echo "Starting Load-Generator deployment..."
+  LOAD_GEN_REPO="$GIT_BASE_URL/load-generator/refs/heads/main"
+  #.env properties
+  curl -fsSL -o $HOME/apps/tmp/.env "$LOAD_GEN_REPO/.env" && [ -s "$HOME/apps/tmp/.env" ] || { echo "Error: Failed to download .env or file is empty."; exit 1; }
+  #retrieve passwords from secrets file and update .env
+  retrieve_pw "$SECRETS_DIR/rabbitmq_cred" "$HOME/apps/tmp/.env" "rabbitmq_password" "rabbitmq_password_placeholder" "="
+  retrieve_pw "$SECRETS_DIR/hmac_key" "$HOME/apps/tmp/.env" "hmac_key" "hmac_key_placeholder" "="
+  retrieve_pw "$SECRETS_DIR/db_cred" "$HOME/apps/tmp/.env" "daddy" "mysql_password_placeholder" ":"
+  mv $HOME/apps/tmp/.env $LOAD_GEN_HOME/bin/.env
+  #requirements file
+  curl -fsSL -o $HOME/apps/tmp/requirements.txt "$LOAD_GEN_REPO/requirements.txt" && [ -s "$HOME/apps/tmp/requirements.txt" ] || { echo "Error: Failed to download requirements.txt or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/requirements.txt $LOAD_GEN_HOME/bin/requirements.txt
+  #bin files
+  curl -fsSL -o $HOME/apps/tmp/start.sh "$LOAD_GEN_REPO/start.sh" && [ -s "$HOME/apps/tmp/start.sh" ] || { echo "Error: Failed to download start.sh or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/start.sh $LOAD_GEN_HOME/bin/start.sh
+  chmod +x $LOAD_GEN_HOME/bin/start.sh
+  curl -fsSL -o $HOME/apps/tmp/source-data-interface.py "$LOAD_GEN_REPO/source-data-interface.py" && [ -s "$HOME/apps/tmp/source-data-interface.py" ] || { echo "Error: Failed to download source-data-interface.py or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/source-data-interface.py $LOAD_GEN_HOME/bin/source-data-interface.py
+  chmod +x $LOAD_GEN_HOME/bin/source-data-interface.py
+  curl -fsSL -o $HOME/apps/tmp/passenger-svc.py "$LOAD_GEN_REPO/passenger-svc.py" && [ -s "$HOME/apps/tmp/passenger-svc.py" ] || { echo "Error: Failed to download passenger-svc.py or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/passenger-svc.py $LOAD_GEN_HOME/bin/passenger-svc.py
+  chmod +x $LOAD_GEN_HOME/bin/passenger-svc.py
+  echo "Load-Generator deployment completed."
+}
+
 #cleanup
 cleanup() {
   #cleanup old backups
@@ -364,9 +412,13 @@ elif [ "$APPLICATION_NAME" == "zookeeper" ] && [ "$DEPLOY_ROLLBACK" == "deploy" 
 elif [ "$APPLICATION_NAME" == "zookeeper" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
   echo "Rolling back Zookeeper..."
 elif [ "$APPLICATION_NAME" == "load-generator" ] && [ "$DEPLOY_ROLLBACK" == "deploy" ]; then
+  echo "Backup Load-Generator..."
+  load_generator_backup
   echo "Deploying load-generator..."
+  load_generator_deploy
 elif [ "$APPLICATION_NAME" == "load-generator" ] && [ "$DEPLOY_ROLLBACK" == "rollback" ]; then
   echo "Rolling back load-generator..."
+  load_generator_rollback
 else
   echo "Error: Deployment logic for $APPLICATION_NAME is not implemented."
   exit 1
