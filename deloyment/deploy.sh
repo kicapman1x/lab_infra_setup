@@ -139,6 +139,7 @@ load_generator_rollback() {
   cp -r "$VERSION_DIR/passenger-svc.py" "$LOAD_GEN_HOME/bin/passenger-svc.py"
   cp -r "$VERSION_DIR/flight-svc.py" "$LOAD_GEN_HOME/bin/flight-svc.py"
   cp -r "$VERSION_DIR/facial-svc.py" "$LOAD_GEN_HOME/bin/facial-svc.py"
+  cp -r "$VERSION_DIR/satellite-interface.py" "$LOAD_GEN_HOME/bin/satellite-interface.py"
   echo "Load-Generator rollback to version $ROLLBACK_VERSION completed."
 }
 
@@ -203,6 +204,7 @@ load_generator_backup() {
   cp -r "$LOAD_GEN_HOME/bin/passenger-svc.py" "$BACKUP_DIR/"
   cp -r "$LOAD_GEN_HOME/bin/flight-svc.py" "$BACKUP_DIR/"
   cp -r "$LOAD_GEN_HOME/bin/facial-svc.py" "$BACKUP_DIR/"
+  cp -r "$LOAD_GEN_HOME/bin/satellite-interface.py" "$BACKUP_DIR/"
   echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
 }
 
@@ -343,6 +345,9 @@ load_generator_deploy() {
   curl -fsSL -o $HOME/apps/tmp/facial-svc.py "$LOAD_GEN_REPO/facial-svc.py" && [ -s "$HOME/apps/tmp/facial-svc.py" ] || { echo "Error: Failed to download facial-svc.py or file is empty."; exit 1; }
   mv $HOME/apps/tmp/facial-svc.py $LOAD_GEN_HOME/bin/facial-svc.py
   chmod +x $LOAD_GEN_HOME/bin/facial-svc.py 
+  curl -fsSL -o $HOME/apps/tmp/satellite-interface.py "$LOAD_GEN_REPO/satellite-interface.py" && [ -s "$HOME/apps/tmp/satellite-interface.py" ] || { echo "Error: Failed to download satellite-interface.py or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/satellite-interface.py $LOAD_GEN_HOME/bin/satellite-interface.py
+  chmod +x $LOAD_GEN_HOME/bin/satellite-interface.py 
 }
 
 #cleanup
