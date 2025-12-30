@@ -143,6 +143,7 @@ load_generator_rollback() {
   cp -r "$VERSION_DIR/satellite1.py" "$LOAD_GEN_HOME/bin/satellite1.py"
   cp -r "$VERSION_DIR/satellite2.py" "$LOAD_GEN_HOME/bin/satellite2.py"
   cp -r "$VERSION_DIR/satellite3.py" "$LOAD_GEN_HOME/bin/satellite3.py"
+  cp -r "$VERSION_DIR/data-lake.py" "$LOAD_GEN_HOME/bin/data-lake.py"
   echo "Load-Generator rollback to version $ROLLBACK_VERSION completed."
 }
 
@@ -211,6 +212,7 @@ load_generator_backup() {
   cp -r "$LOAD_GEN_HOME/bin/satellite1.py" "$BACKUP_DIR/"
   cp -r "$LOAD_GEN_HOME/bin/satellite2.py" "$BACKUP_DIR/"
   cp -r "$LOAD_GEN_HOME/bin/satellite3.py" "$BACKUP_DIR/"
+  cp -r "$LOAD_GEN_HOME/bin/data-lake.py" "$BACKUP_DIR/"
   echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
 }
 
@@ -363,6 +365,9 @@ load_generator_deploy() {
   curl -fsSL -o $HOME/apps/tmp/satellite3.py "$LOAD_GEN_REPO/satellite3.py" && [ -s "$HOME/apps/tmp/satellite3.py" ] || { echo "Error: Failed to download satellite3.py or file is empty."; exit 1; }
   mv $HOME/apps/tmp/satellite3.py $LOAD_GEN_HOME/bin/satellite3.py
   chmod +x $LOAD_GEN_HOME/bin/satellite3.py
+  curl -fsSL -o $HOME/apps/tmp/data-lake.py "$LOAD_GEN_REPO/data-lake.py" && [ -s "$HOME/apps/tmp/data-lake.py" ] || { echo "Error: Failed to download data-lake.py or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/data-lake.py $LOAD_GEN_HOME/bin/data-lake.py
+  chmod +x $LOAD_GEN_HOME/bin/data-lake.py
 }
 
 #cleanup
