@@ -135,6 +135,7 @@ load_generator_rollback() {
   cp -r "$VERSION_DIR/.env" "$LOAD_GEN_HOME/bin/.env"
   cp -r "$VERSION_DIR/requirements.txt" "$LOAD_GEN_HOME/bin/requirements.txt"
   cp -r "$VERSION_DIR/start.sh" "$LOAD_GEN_HOME/bin/start.sh"
+  cp -r "$VERSION_DIR/stop.sh" "$LOAD_GEN_HOME/bin/stop.sh"
   cp -r "$VERSION_DIR/source-data-interface.py" "$LOAD_GEN_HOME/bin/source-data-interface.py"
   cp -r "$VERSION_DIR/passenger-svc.py" "$LOAD_GEN_HOME/bin/passenger-svc.py"
   cp -r "$VERSION_DIR/flight-svc.py" "$LOAD_GEN_HOME/bin/flight-svc.py"
@@ -204,6 +205,7 @@ load_generator_backup() {
   cp -r "$LOAD_GEN_HOME/bin/.env" "$BACKUP_DIR/"
   cp -r "$LOAD_GEN_HOME/bin/requirements.txt" "$BACKUP_DIR/"
   cp -r "$LOAD_GEN_HOME/bin/start.sh" "$BACKUP_DIR/"
+  cp -r "$LOAD_GEN_HOME/bin/stop.sh" "$BACKUP_DIR/"
   cp -r "$LOAD_GEN_HOME/bin/source-data-interface.py" "$BACKUP_DIR/"
   cp -r "$LOAD_GEN_HOME/bin/passenger-svc.py" "$BACKUP_DIR/"
   cp -r "$LOAD_GEN_HOME/bin/flight-svc.py" "$BACKUP_DIR/"
@@ -340,6 +342,9 @@ load_generator_deploy() {
   curl -fsSL -o $HOME/apps/tmp/start.sh "$LOAD_GEN_REPO/start.sh" && [ -s "$HOME/apps/tmp/start.sh" ] || { echo "Error: Failed to download start.sh or file is empty."; exit 1; }
   mv $HOME/apps/tmp/start.sh $LOAD_GEN_HOME/bin/start.sh
   chmod +x $LOAD_GEN_HOME/bin/start.sh
+  curl -fsSL -o $HOME/apps/tmp/stop.sh "$LOAD_GEN_REPO/stop.sh" && [ -s "$HOME/apps/tmp/stop.sh" ] || { echo "Error: Failed to download stop.sh or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/stop.sh $LOAD_GEN_HOME/bin/stop.sh
+  chmod +x $LOAD_GEN_HOME/bin/stop.sh
   curl -fsSL -o $HOME/apps/tmp/source-data-interface.py "$LOAD_GEN_REPO/source-data-interface.py" && [ -s "$HOME/apps/tmp/source-data-interface.py" ] || { echo "Error: Failed to download source-data-interface.py or file is empty."; exit 1; }
   mv $HOME/apps/tmp/source-data-interface.py $LOAD_GEN_HOME/bin/source-data-interface.py
   chmod +x $LOAD_GEN_HOME/bin/source-data-interface.py
