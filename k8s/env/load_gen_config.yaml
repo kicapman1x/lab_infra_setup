@@ -1,0 +1,35 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: loadgen-config
+data:
+  PAYLOAD_DIR: /data/load_gen/biz
+  TMP_DIR: /data/load_gen/tmp
+  FACIAL_DIR: /data/load_gen/facial
+
+  INT_PERIOD: "15"
+  DATA_GENERATION_INTERVAL: "3600"
+
+  RMQ_HOST: rabbit-server.han.gg
+  RMQ_PORT: "5671"
+
+  MYSQL_HOST: db1.han.gg
+  MYSQL_PORT: "3306"
+  MYSQL_DB: hq
+  MYSQL_DB_SATELLITE1: s1
+  MYSQL_DB_SATELLITE2: s2
+  MYSQL_DB_SATELLITE3: s3
+
+  log_directory: /data/load_gen/logs
+  log_level: INFO
+
+  image_gen_api: https://100k-faces.vercel.app/api/random-image
+
+  no_flights_per_cycle: "10"
+  no_passengers_per_flight: "30"
+
+  facial_api_latency: "5"
+  check_in_interval: "900"
+  delete_flight_interval: "300"
+  delete_facial_passenger_interval: "300"
+  delete_satellite_interval: "300"
