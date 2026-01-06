@@ -8,11 +8,9 @@ import pika
 import logging
 from data_lake import sample_lake
 
-logger = logging.getLogger(__name__)
-
 def bootstrap():
     #Environment variables
-    global tmp_dir, ca_cert, rmq_url, rmq_port, rmq_username, rmq_password, interval, QUEUE_NAME, PUBLISH_INTERVAL, n_flights, n_passengers, logdir, loglvl
+    global tmp_dir, ca_cert, rmq_url, rmq_port, rmq_username, rmq_password, interval, QUEUE_NAME, PUBLISH_INTERVAL, n_flights, n_passengers, logdir, loglvl, logger, log_level, formatter, stdout_handler, file_handler
     tmp_dir = os.getenv("TMP_DIR")
     ca_cert= os.environ.get("CA_PATH")
     rmq_url = os.environ.get("RMQ_HOST")
@@ -26,14 +24,24 @@ def bootstrap():
     n_flights= int(os.environ.get("no_flights_per_cycle", "10"))
     n_passengers= int(os.environ.get("no_passengers_per_flight", "50"))
 
-    #Logging setup
+    #logging 
     log_level = getattr(logging, loglvl, logging.INFO)
-    logging.basicConfig(
-        filename=f'{logdir}/source-data-interface.log',
-        level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logger = logging.getLogger()
+    logger.setLevel(log_level)
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
-    
+
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(log_level)
+    stdout_handler.setFormatter(formatter)
+
+    file_handler = logging.FileHandler(f'{logdir}/source-data-interface.log')
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+
+    logger.addHandler(stdout_handler)
+    logger.addHandler(file_handler)
 
 def get_rmq_connection():
     credentials = pika.PlainCredentials(

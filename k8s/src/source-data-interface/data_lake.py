@@ -21,13 +21,24 @@ def bootstrap():
     n_passengers= int(os.environ.get("no_passengers_per_flight", "50"))
     output_file = f"{tmp_dir}/batch_payload.csv"
 
-    #Logging setup
+    #logging 
     log_level = getattr(logging, loglvl, logging.INFO)
-    logging.basicConfig(
-        filename=f'{logdir}/data-lake.log',
-        level=log_level,
-        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    logger = logging.getLogger()
+    logger.setLevel(log_level)
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
     )
+
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(log_level)
+    stdout_handler.setFormatter(formatter)
+
+    file_handler = logging.FileHandler(f'{logdir}/source-data-interface.log')
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+
+    logger.addHandler(stdout_handler)
+    logger.addHandler(file_handler)
     
 def load_csv():
     with open(f"{payload_dir}/flights.csv", newline="", encoding="utf-8") as csvfile:

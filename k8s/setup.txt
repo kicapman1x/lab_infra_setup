@@ -1,1 +1,7 @@
 kind create cluster --name daddy-k8s --config $HOME/apps/docker/docker_apps/kind/config/cluster_config/daddy_k8s.yaml --kubeconfig $HOME/apps/docker/docker_apps/kind/config/cluster_config/daddy_kubeconfig
+
+DOCKER_LOGIN
+docker build -t kicapman1x/load-generator:source-data-interface-rc1
+docker build -t kicapman1x/load-generator:passenger-service-rc1
+docker push kicapman1x/load-generator:source-data-interface-rc1
+docker push kicapman1x/load-generator:passenger-service-rc1

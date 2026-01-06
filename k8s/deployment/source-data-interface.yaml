@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: source-data-interface
+  labels:
+    app: source-data-interface
+    appCode: load-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: source-data-interface
+      appCode: load-generator
+  template:
+    metadata:
+      labels:
+        app: source-data-interface
+        appCode: load-generator
+    spec:
+      containers:
+      - name: source-data-interface
+        image: kicapman1x/load-generator:source-data-interface-rc1
+        imagePullPolicy: IfNotPresent
+
+        envFrom:
+        - configMapRef:
+            name: loadgen-config
+        - secretRef:
+            name: loadgen-secret
+
+        volumeMounts:
+        - name: load-gen-data
+          mountPath: /data/load_gen
+
+      volumes:
+      - name: load-gen-data
+        persistentVolumeClaim:
+          claimName: load-gen-pvc
