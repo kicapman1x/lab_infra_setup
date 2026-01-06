@@ -6,6 +6,7 @@ import ssl
 import random
 import pika
 import logging
+import sys
 from data_lake import sample_lake
 
 def bootstrap():

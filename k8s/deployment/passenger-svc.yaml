@@ -1,25 +1,25 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: source-data-interface
+  name: passenger-svc
   labels:
-    app: source-data-interface
+    app: passenger-svc
     appCode: load-generator
 spec:
   replicas: 1
   selector:
     matchLabels:
-      app: source-data-interface
+      app: passenger-svc
       appCode: load-generator
   template:
     metadata:
       labels:
-        app: source-data-interface
+        app: passenger-svc
         appCode: load-generator
     spec:
       containers:
-      - name: source-data-interface
-        image: kicapman1x/load-generator:source-data-interface-rc1
+      - name: passenger-svc
+        image: kicapman1x/load-generator:passenger-service-rc1
         imagePullPolicy: Always
         envFrom:
         - configMapRef:

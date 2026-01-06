@@ -3,16 +3,22 @@ import sys
 import ssl
 import pika
 import os
+from dotenv import load_dotenv
 import hmac
 import hashlib
 import base64
 import mysql.connector
 import uuid
 import logging
+import requests
+import gzip
+import time
 
 def bootstrap():
     #Environment variables
-    global rmq_url, rmq_port, rmq_username, rmq_password, ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, mysql_db, CONSUME_QUEUE_NAME, PRODUCE_QUEUE_NAME, logdir, loglvl, logger
+    global facial_dir, facial_api, rmq_url, rmq_port, rmq_username, rmq_password, ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, mysql_db, CONSUME_QUEUE_NAME, PRODUCE_QUEUE_NAME, logdir, loglvl, logger, facial_api_latency
+    facial_dir = os.environ.get("FACIAL_DIR")
+    facial_api = os.environ.get("image_gen_api")
     rmq_url = os.environ.get("RMQ_HOST")
     rmq_port = int(os.environ.get("RMQ_PORT"))
     rmq_username = os.environ.get("RMQ_USER")
@@ -24,10 +30,11 @@ def bootstrap():
     mysql_user = os.environ.get("MYSQL_USER")
     mysql_password = os.environ.get("MYSQL_PW")
     mysql_db = os.environ.get("MYSQL_DB")
-    CONSUME_QUEUE_NAME = "source_data_intake"
-    PRODUCE_QUEUE_NAME = "source_data_passenger"
+    CONSUME_QUEUE_NAME = "source_data_flight"
+    PRODUCE_QUEUE_NAME = "source_data_facial"
     logdir = os.environ.get("log_directory", ".")
     loglvl = os.environ.get("log_level", "INFO").upper()
+    facial_api_latency= int(os.environ.get("facial_api_latency", "5"))
 
     #logging 
     log_level = getattr(logging, loglvl, logging.INFO)
@@ -41,7 +48,7 @@ def bootstrap():
     stdout_handler.setLevel(log_level)
     stdout_handler.setFormatter(formatter)
 
-    file_handler = logging.FileHandler(f'{logdir}/passenger-svc.log')
+    file_handler = logging.FileHandler(f'{logdir}/facial-svc.log')
     file_handler.setLevel(log_level)
     file_handler.setFormatter(formatter)
 
@@ -90,19 +97,35 @@ def get_mysql_connection():
     )
 
 def process_message(channel, method, properties, body):
+    global conn
+    conn = get_mysql_connection()
     try:
         message = json.loads(body)
         logger.info(f"Received message: {message}")
 
-        p_key, trace_id = process_person(message)
-        if(p_key):
-            logger.info(f"[{trace_id}] Processed passenger: {p_key}")
-            message["passenger_key"] = p_key
-            message["trace_id"] = trace_id
-            logger.info(f"[{trace_id}] Publishing passenger details to {PRODUCE_QUEUE_NAME}")
-            channel.queue_declare(queue=PRODUCE_QUEUE_NAME, durable=True)
-            body = json.dumps(message)
+        p_key = message["passenger_key"]
+        trace_id = message["trace_id"]
+        if passenger_exists(conn, p_key):
+            logger.warning(f"[{trace_id}] Passenger exists : {p_key} - Skipping facial insertion.")
+            if facial_exists(conn, p_key):
+                logger.warning(f"[{trace_id}] Facial data exists for passenger : {p_key} - Skipping facial insertion.")
+            else:
+                logger.info(f"[{trace_id}] Feature not implemented yet - next deployment.")
+                #generate pic - next deployment
+        else:
+            facial_b64 = get_facial_image(p_key)
+            logger.info(f"[{trace_id}] Inserting facial data for passenger: {p_key} with trace ID: {trace_id}")
+            insert_facial(conn, message["passenger_key"], trace_id)
+            conn.commit()
 
+            logger.info(f"[{trace_id}] Publishing facial details to {PRODUCE_QUEUE_NAME}")
+            channel.queue_declare(queue=PRODUCE_QUEUE_NAME, durable=True)
+            message_push = {
+                "passenger_key": message["passenger_key"],
+                "facial_image": facial_b64,
+                "trace_id": trace_id
+            }
+            body = json.dumps(message_push)
             channel.basic_publish(
                 exchange="",
                 routing_key=PRODUCE_QUEUE_NAME,
@@ -111,92 +134,68 @@ def process_message(channel, method, properties, body):
                     delivery_mode=2
                 )
             )
-            logger.info(f"[{trace_id}] Passenger details written and message published.")
-        else:
-            logger.info(f"[{trace_id}] Passenger details not written - On to next message!")    
-        channel.basic_ack(delivery_tag=method.delivery_tag)
+            logger.info("Facial details written and message published.")
+        channel.basic_ack(delivery_tag=method.delivery_tag)    
     except Exception as e:
         logger.error(f"Error processing message: {e}")
         channel.basic_nack(
             delivery_tag=method.delivery_tag,
             requeue=True
         )
+    conn.close()
 
-def process_person(message):
-    logger.debug(f"Processing passenger: {message}")
-    p_id = message["passenger_id"]
-    sn = message["first_name"]
-    ln = message["last_name"]
-    p_fn = f"{sn} {ln}"
-    p_nat = message["nationality"]
-    p_age = int(message["age"])
-
-    p_key = generate_p_key(p_id,p_fn,p_nat)
-    logger.info(f"Generated passenger key: {p_key}")
-
-    conn = get_mysql_connection()
-    try:
-        if passenger_exists(conn, p_key):
-            return None, None
-        else: 
-            logger.info(f"Inserting new passenger: {p_key} - {p_fn} - {p_nat} - {p_age}")
-            trace_id = str(uuid.uuid4())
-            logger.debug(f"Generated trace ID: {trace_id}")
-            insert_passenger(conn, p_key, p_fn, p_nat, p_age, trace_id)
-            logger.info(f"[{trace_id}] Inserted passenger {p_key} into database.")
-            conn.commit()
-            return p_key, trace_id
-    except mysql.connector.errors.IntegrityError:
-        conn.rollback()
-        return None
-    finally:
-        conn.close()
+def get_facial_image(passenger_key):
+    logger.debug(f"Generating facial image for passenger: {passenger_key}")
+    time.sleep(facial_api_latency)
+    resp = requests.get(
+        facial_api,
+        timeout=10
+    )
+    resp.raise_for_status()
+    logger.debug(f"Facial image retrieved for passenger: {passenger_key}")
+    gzipped = gzip.compress(resp.content)
+    facial_b64 = base64.b64encode(gzipped).decode("utf-8")
+    # with open(f"{facial_dir}/{passenger_key}.b64", "w") as f:
+    #     f.write(facial_b64)
+    return facial_b64
 
 def passenger_exists(conn, passenger_key):
     logger.debug(f"Checking if passenger exists: {passenger_key}")
     cursor = conn.cursor()
     cursor.execute(
-        "SELECT 1 FROM passengers WHERE passenger_key = %s LIMIT 1",
+        "SELECT 1 FROM facial WHERE passenger_key = %s LIMIT 1",
         (passenger_key,)
     )
     return cursor.fetchone() is not None
 
-def insert_passenger(conn, passenger_key, passenger_name, passenger_nationality, passenger_age, trace_id):
+def facial_exists(conn, passenger_key):
+    logger.debug(f"Checking if facial data exists: {passenger_key}")
+    cursor = conn.cursor()
+    cursor.execute(
+        "SELECT has_image FROM facial WHERE passenger_key = %s LIMIT 1",
+        (passenger_key,)
+    )
+    return cursor.fetchone() is not None
+
+def insert_facial(conn, passenger_key, trace_id):
     cursor = conn.cursor()
     cursor.execute(
         """
-        INSERT INTO passengers (
+        INSERT INTO facial (
             passenger_key,
-            passenger_name,
-            passenger_age,
-            passenger_nationality,
-            trace_id,
-            to_delete
+            trace_id
         )
-        VALUES (%s, %s, %s, %s, %s, FALSE)
+        VALUES (%s, %s)
         """,
         (
             passenger_key,
-            passenger_name,
-            passenger_age,
-            passenger_nationality,
             trace_id
         )
     )
 
-def generate_p_key(id,fn,nat):
-    canonical = f"{id}|{fn}|{nat}".lower().strip()
-    digest = hmac.new(
-        secret_key,
-        canonical.encode("utf-8"),
-        hashlib.sha256
-    ).digest()
-    return base64.urlsafe_b64encode(digest).decode("utf-8")[:32]
-
-
 def main():
     bootstrap()
-    logger.info("**********Starting passenger service**********")
+    logger.info("**********Starting facial service**********")
 
     logger.info("Starting SSL RabbitMQ consumer...")
     global connection, channel 
