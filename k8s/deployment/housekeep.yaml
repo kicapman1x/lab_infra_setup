@@ -1,0 +1,38 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: housekeep
+  labels:
+    app: housekeep
+    appCode: load-generator
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: housekeep
+      appCode: load-generator
+  template:
+    metadata:
+      labels:
+        app: housekeep
+        appCode: load-generator
+    spec:
+      containers:
+      - name: housekeep
+        image: kicapman1x/load-generator:housekeep-rc1
+        imagePullPolicy: Always
+        envFrom:
+        - configMapRef:
+            name: loadgen-config
+        - secretRef:
+            name: loadgen-secret
+        env:
+        - name: PYTHONUNBUFFERED
+          value: "1"
+        volumeMounts:
+        - name: load-gen-data
+          mountPath: /data/load_gen
+      volumes:
+      - name: load-gen-data
+        persistentVolumeClaim:
+          claimName: load-gen-pvc

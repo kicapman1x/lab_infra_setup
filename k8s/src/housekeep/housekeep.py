@@ -1,0 +1,217 @@
+import json
+import ssl
+import pika
+import os
+from dotenv import load_dotenv
+import hmac
+import hashlib
+import base64
+import mysql.connector
+import uuid
+import logging
+import requests
+import gzip
+from datetime import datetime
+import random
+import threading
+import time
+import sys
+
+def bootstrap():
+    #Environment variables
+    global ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, mysql_db, logdir, loglvl, mysql_db_s1, mysql_db_s2, mysql_db_s3, check_in_interval, delete_orchestrator_interval, logger
+    ca_cert = os.environ.get("CA_PATH")
+    mysql_url = os.environ.get("MYSQL_HOST")
+    mysql_port = int(os.environ.get("MYSQL_PORT"))
+    mysql_user = os.environ.get("MYSQL_USER")
+    mysql_password = os.environ.get("MYSQL_PW")
+    mysql_db = os.environ.get("MYSQL_DB")
+    mysql_db_s1 = os.environ.get("MYSQL_DB_SATELLITE1")
+    mysql_db_s2 = os.environ.get("MYSQL_DB_SATELLITE2")
+    mysql_db_s3 = os.environ.get("MYSQL_DB_SATELLITE3")
+    logdir = os.environ.get("log_directory", ".")
+    loglvl = os.environ.get("log_level", "INFO").upper()
+    check_in_interval = int(os.environ.get("check_in_interval", "60"))
+    delete_orchestrator_interval = int(os.environ.get("delete_orchestrator_interval", "300"))
+
+    #Logging setup
+    log_level = getattr(logging, loglvl, logging.INFO)
+    logger = logging.getLogger()
+    logger.setLevel(log_level)
+    formatter = logging.Formatter(
+        '%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+    )
+
+    stdout_handler = logging.StreamHandler(sys.stdout)
+    stdout_handler.setLevel(log_level)
+    stdout_handler.setFormatter(formatter)
+
+    file_handler = logging.FileHandler(f'{logdir}/housekeep.log')
+    file_handler.setLevel(log_level)
+    file_handler.setFormatter(formatter)
+
+    logger.addHandler(stdout_handler)
+    logger.addHandler(file_handler)
+
+def get_mysql_connection():
+    return mysql.connector.connect(
+        host=mysql_url,
+        port=mysql_port,
+        user=mysql_user,
+        password=mysql_password,
+        database=mysql_db,
+
+        ssl_ca=ca_cert,
+        ssl_verify_cert=True,
+        ssl_verify_identity=True,  
+
+        autocommit=False
+    )
+
+def get_mysql_connection_s1():
+    return mysql.connector.connect(
+        host=mysql_url,
+        port=mysql_port,
+        user=mysql_user,
+        password=mysql_password,
+        database=mysql_db_s1,
+
+        ssl_ca=ca_cert,
+        ssl_verify_cert=True,
+        ssl_verify_identity=True,  
+
+        autocommit=False
+    )
+
+def get_mysql_connection_s2():
+    return mysql.connector.connect(
+        host=mysql_url,
+        port=mysql_port,
+        user=mysql_user,
+        password=mysql_password,
+        database=mysql_db_s2,
+
+        ssl_ca=ca_cert,
+        ssl_verify_cert=True,
+        ssl_verify_identity=True,  
+
+        autocommit=False
+    )
+
+def get_mysql_connection_s3():
+    return mysql.connector.connect(
+        host=mysql_url,
+        port=mysql_port,
+        user=mysql_user,
+        password=mysql_password,
+        database=mysql_db_s3,
+
+        ssl_ca=ca_cert,
+        ssl_verify_cert=True,
+        ssl_verify_identity=True,  
+
+        autocommit=False
+    )
+
+def soft_delete_by_departure_dates():
+    conn = get_mysql_connection()
+    cursor = conn.cursor()
+    query = "UPDATE flights SET to_delete = TRUE WHERE departure_date < (UTC_TIMESTAMP() - INTERVAL 30 MINUTE)"
+    cursor.execute(query)
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+def check_in():
+    while True:
+        #soft delete 
+        logger.info("[check_in] Starting soft delete of old flight records from flights table.")
+        soft_delete_by_departure_dates()
+        logger.info("[check_in] Soft deleted old flight records from flights table.")
+        time.sleep(check_in_interval)
+
+def flights_delete():
+    #hard delete flight
+    logger.info("[flights_delete] Starting hard delete of records marked for deletion from flights table.")
+    conn = get_mysql_connection()
+    cursor = conn.cursor()
+    delete_query = "DELETE FROM flights WHERE to_delete = TRUE"
+    cursor.execute(delete_query)
+    deleted_count = cursor.rowcount
+    conn.commit()
+    cursor.close()
+    conn.close()
+    logger.info(f"[flights_delete] Deleted {deleted_count} records from flights table.")
+
+def facial_n_passenger_delete():
+    #hard delete facial and passenger data
+    logger.info("[facial_n_passenger_delete] Starting hard delete of orphaned records from facial and passenger tables.")
+    conn = get_mysql_connection()
+    cursor = conn.cursor()
+    delete_query_facial = "DELETE facial from facial LEFT JOIN flights ON facial.passenger_key = flights.passenger_key WHERE flights.passenger_key IS NULL"
+    cursor.execute(delete_query_facial)
+    deleted_facial_count = cursor.rowcount
+    logger.info(f"[facial_n_passenger_delete] Deleted {deleted_facial_count} records from facial table.")
+
+    delete_query_passenger = "DELETE passengers from passengers LEFT JOIN flights ON passengers.passenger_key = flights.passenger_key WHERE flights.passenger_key IS NULL"
+    cursor.execute(delete_query_passenger)
+    deleted_passenger_count = cursor.rowcount
+    logger.info(f"[facial_n_passenger_delete] Deleted {deleted_passenger_count} records from passenger table.")
+
+    conn.commit()
+    cursor.close()
+    conn.close()
+
+def satellite_delete():
+    #hard delete satellite data
+    logger.info("[satellite_delete] Starting hard delete of orphaned records from satellite databases.")
+    conn = get_mysql_connection()
+    cursor = conn.cursor()
+
+    logger.info("[satellite_delete] Deleting orphaned records from satellite 1.")
+    delete_query_s1 = "DELETE tp FROM s1.touchpoint AS tp LEFT JOIN hq.flights AS f ON tp.passenger_key = f.passenger_key WHERE f.passenger_key IS NULL"
+    cursor.execute(delete_query_s1)
+    conn.commit()
+
+    logger.info("[satellite_delete] Deleting orphaned records from satellite 2.")
+    delete_query_s2 = "DELETE tp FROM s2.touchpoint AS tp LEFT JOIN hq.flights AS f ON tp.passenger_key = f.passenger_key WHERE f.passenger_key IS NULL"
+    cursor.execute(delete_query_s2)
+    conn.commit()
+
+    logger.info("[satellite_delete] Deleting orphaned records from satellite 3.")
+    delete_query_s3 = "DELETE tp FROM s3.touchpoint AS tp LEFT JOIN hq.flights AS f ON tp.passenger_key = f.passenger_key WHERE f.passenger_key IS NULL"
+    cursor.execute(delete_query_s3)
+    conn.commit()
+
+    cursor.close()
+    conn.close()
+    logger.info("Deleted orphaned records from satellite databases.")
+
+def houskeep_orchestrator():
+    while True:
+        flights_delete()
+        satellite_delete()
+        facial_n_passenger_delete()
+        #orphaned biom detail in file system clean up can be added here
+        #create temp table and load the list of file names (which is p_keys) and remove the .b64 string from the names. 
+        #perform left join and see which is missing
+        #do an os remove on those files
+        time.sleep(delete_orchestrator_interval)
+
+def main():
+    bootstrap()
+    logger.info("**********Starting housekeep service**********")
+
+    logger.info("Starting background threads for housekeeping tasks.")
+
+    logger.info("[check_in] Starting check-in thread.")
+    threading.Thread(target=check_in, daemon=True).start()
+
+    logger.info("[houskeep_orchestrator] Starting houskeep orchestrator thread.")
+    threading.Thread(target=houskeep_orchestrator, daemon=True).start()
+
+    while True:
+        time.sleep(36000)
+
+if __name__ == "__main__":
+    main()
