@@ -6,12 +6,16 @@ import time
 from datetime import datetime, timedelta
 import logging
 import sys
-
-logger = logging.getLogger(__name__)
+from opentelemetry import metrics
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from opentelemetry.semconv.resource import ResourceAttributes
 
 def bootstrap():
     #Environment variables
-    global payload_dir, tmp_dir, ca_cert, interval, n_flights, n_passengers, logdir, loglvl, output_file
+    global payload_dir, tmp_dir, ca_cert, interval, n_flights, n_passengers, logdir, loglvl, output_file, logger, log_level, formatter, stdout_handler, file_handler, meter, publish_exec_time, logger
     payload_dir = os.getenv("PAYLOAD_DIR")
     tmp_dir = os.getenv("TMP_DIR")
     ca_cert= os.environ.get("CA_PATH")
@@ -21,6 +25,10 @@ def bootstrap():
     n_flights= int(os.environ.get("no_flights_per_cycle", "10"))
     n_passengers= int(os.environ.get("no_passengers_per_flight", "50"))
     output_file = f"{tmp_dir}/batch_payload.csv"
+    otel_service_name = "data-lake"
+    otel_exporter_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    otel_exporter_interval = int(os.environ.get("OTEL_EXPORT_INTERVAL"))
+    release_version = os.environ.get("release_version")
 
     #logging 
     log_level = getattr(logging, loglvl, logging.INFO)
@@ -34,13 +42,41 @@ def bootstrap():
     stdout_handler.setLevel(log_level)
     stdout_handler.setFormatter(formatter)
 
+    #FUTURE HAN TAKENOTE LEAVE THIS I WANT COMBINE LOGS SINCE ITS SAME CONTAINER
     file_handler = logging.FileHandler(f'{logdir}/source-data-interface.log')
     file_handler.setLevel(log_level)
     file_handler.setFormatter(formatter)
 
     logger.addHandler(stdout_handler)
     logger.addHandler(file_handler)
-    
+
+    #OTEL setup
+    resource = Resource.create({
+        "service.name": otel_service_name,
+        "service.version": release_version,
+    })
+
+    metric_reader = PeriodicExportingMetricReader(
+    OTLPMetricExporter(endpoint=otel_exporter_endpoint, insecure=True),
+    export_interval_millis=otel_exporter_interval
+    )
+
+    metrics.set_meter_provider(
+        MeterProvider(
+            resource=resource,
+            metric_readers=[metric_reader],
+        )
+    )
+
+    meter = metrics.get_meter(__name__)
+
+    #Different metrics 
+    publish_exec_time = meter.create_histogram(
+        "source_data_interface.execution_time",
+        unit="ms",
+        description="Time spent unpackaging message, publishing to RMQ"
+    )
+
 def load_csv():
     with open(f"{payload_dir}/flights.csv", newline="", encoding="utf-8") as csvfile:
         return list(csv.DictReader(csvfile))
@@ -50,6 +86,7 @@ def sample_lake():
     bootstrap()
     logger.info("**********Starting source data publisher**********")
     logger.info("Deleting existing batch payload if any")
+    start = time.perf_counter()
     if os.path.exists(output_file):
         os.remove(output_file)
         logger.info(f"Deleted existing file {output_file}")
@@ -103,4 +140,5 @@ def sample_lake():
             writer.writerows(sampled_rows)
 
         logger.info(f"Wrote batch payload to {tmp_dir}/batch_payload.csv")
-    logger.info(f"Sleeping for {interval} seconds before generating next batches")
+    duration_ms = (time.perf_counter() - start) * 1000
+    publish_exec_time.record(duration_ms)

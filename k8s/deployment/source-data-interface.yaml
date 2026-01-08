@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: source-data-interface
-        image: kicapman1x/load-generator:source-data-interface-rc1
+        image: kicapman1x/load-generator_source-data-interface:rc1
         imagePullPolicy: Always
         envFrom:
         - configMapRef:
@@ -29,6 +29,8 @@ spec:
         env:
         - name: PYTHONUNBUFFERED
           value: "1"
+        - name: release_version
+          value: "rc1"
         volumeMounts:
         - name: load-gen-data
           mountPath: /data/load_gen

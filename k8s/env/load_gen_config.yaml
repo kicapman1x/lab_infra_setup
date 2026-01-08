@@ -33,3 +33,9 @@ data:
   delete_flight_interval: "300"
   delete_facial_passenger_interval: "300"
   delete_satellite_interval: "300"
+
+  OTEL_METRICS_EXPORTER: otlp
+  OTEL_TRACES_EXPORTER: none
+  OTEL_LOG_LEVEL: debug
+  OTEL_EXPORTER_OTLP_ENDPOINT: http://opentelemetry-collector-grpc-service.default.svc.cluster.local:4317
+  OTEL_EXPORT_INTERVAL: "1000"

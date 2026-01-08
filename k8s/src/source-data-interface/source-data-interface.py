@@ -8,10 +8,16 @@ import pika
 import logging
 import sys
 from data_lake import sample_lake
+from opentelemetry import metrics
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from opentelemetry.semconv.resource import ResourceAttributes
 
 def bootstrap():
     #Environment variables
-    global tmp_dir, ca_cert, rmq_url, rmq_port, rmq_username, rmq_password, interval, QUEUE_NAME, PUBLISH_INTERVAL, n_flights, n_passengers, logdir, loglvl, logger, log_level, formatter, stdout_handler, file_handler
+    global tmp_dir, ca_cert, rmq_url, rmq_port, rmq_username, rmq_password, interval, QUEUE_NAME, PUBLISH_INTERVAL, n_flights, n_passengers, logdir, loglvl, logger, log_level, formatter, stdout_handler, file_handler, meter, publish_exec_time
     tmp_dir = os.getenv("TMP_DIR")
     ca_cert= os.environ.get("CA_PATH")
     rmq_url = os.environ.get("RMQ_HOST")
@@ -24,6 +30,10 @@ def bootstrap():
     loglvl = os.environ.get("log_level", "INFO").upper()
     n_flights= int(os.environ.get("no_flights_per_cycle", "10"))
     n_passengers= int(os.environ.get("no_passengers_per_flight", "50"))
+    otel_service_name = "source-data-interface"
+    otel_exporter_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    otel_exporter_interval = int(os.environ.get("OTEL_EXPORT_INTERVAL"))
+    release_version = os.environ.get("release_version")
 
     #logging 
     log_level = getattr(logging, loglvl, logging.INFO)
@@ -43,6 +53,33 @@ def bootstrap():
 
     logger.addHandler(stdout_handler)
     logger.addHandler(file_handler)
+
+    #OTEL setup
+    resource = Resource.create({
+        "service.name": otel_service_name,
+        "service.version": release_version,
+    })
+
+    metric_reader = PeriodicExportingMetricReader(
+    OTLPMetricExporter(endpoint=otel_exporter_endpoint, insecure=True),
+    export_interval_millis=otel_exporter_interval
+    )
+
+    metrics.set_meter_provider(
+        MeterProvider(
+            resource=resource,
+            metric_readers=[metric_reader],
+        )
+    )
+
+    meter = metrics.get_meter(__name__)
+
+    #Different metrics 
+    publish_exec_time = meter.create_histogram(
+        "source_data_interface.execution_time",
+        unit="ms",
+        description="Time spent unpackaging message, publishing to RMQ"
+    )
 
 def get_rmq_connection():
     credentials = pika.PlainCredentials(
@@ -91,6 +128,7 @@ def main():
             rows = load_csv()
             logger.info(f"Loaded {len(rows)} rows")
             for n in range(n_flights * n_passengers):
+                start = time.perf_counter()
                 logger.info("Publishing new message from source data")
                 row = random.choice(rows)
                 rows.remove(row)
@@ -124,6 +162,9 @@ def main():
                 with open(f"{tmp_dir}/ingested.jsonl", "a") as f: 
                     f.write(json.dumps(row) + "\n")
 
+                duration_ms = (time.perf_counter() - start) * 1000
+                publish_exec_time.record(duration_ms)
+                
                 time.sleep(PUBLISH_INTERVAL)
     except KeyboardInterrupt:
         logger.info("Shutting down publisher")

@@ -10,4 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY data_lake.py source-data-interface.py ./
 
-CMD ["python", "source-data-interface.py"]
+ENTRYPOINT ["opentelemetry-instrument"]
+CMD ["python", "-u", "source-data-interface.py"]
