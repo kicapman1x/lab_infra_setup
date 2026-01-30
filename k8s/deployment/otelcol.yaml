@@ -18,7 +18,10 @@ spec:
         args:
           - "--config=/apps/otel/config.yaml"
         ports:
-        - containerPort: 4317
+        - name: otlp-grpc
+          containerPort: 4317
+        - name: metrics
+          containerPort: 8888
         volumeMounts:
         - name: otelcol-config
           mountPath: /apps/otel

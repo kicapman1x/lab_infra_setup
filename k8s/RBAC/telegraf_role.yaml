@@ -11,6 +11,10 @@ rules:
     - services
     - endpoints
     - namespaces
+    - secrets
+    - persistentvolumes
+    - persistentvolumeclaims
+    - resourcequotas
   verbs: ["get", "list", "watch"]
 - apiGroups: ["apps"]
   resources:
@@ -18,6 +22,14 @@ rules:
     - daemonsets
     - statefulsets
     - replicasets
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["networking.k8s.io"]
+  resources:
+    - ingresses
+  verbs: ["get", "list", "watch"]
+- apiGroups: ["discovery.k8s.io"]
+  resources:
+    - endpointslices
   verbs: ["get", "list", "watch"]
 - nonResourceURLs:
     - /metrics
