@@ -88,6 +88,8 @@ influxdb_rollback() {
   cp -r "$VERSION_DIR/influx.conf" "$INFLUX_HOME/data/influxdbv2/"
   cp -r "$VERSION_DIR/grafana.ini" "$GRF_HOME/conf/"
   cp -r "$VERSION_DIR/ldap.toml" "$GRF_HOME/conf/"
+  cp -r "$VERSION_DIR/opentelemetry.conf" "$TELEGRAF_HOME/etc/telegraf/telegraf.d/"
+  cp -r "$VERSION_DIR/infra.conf" "$TELEGRAF_HOME/etc/telegraf/telegraf.d/"
   echo "InfluxDB rollback to version $ROLLBACK_VERSION completed."
 }
 
@@ -157,6 +159,8 @@ influxdb_backup() {
   cp -r "$GRF_HOME/conf/grafana.ini" "$BACKUP_DIR/"
   cp -r "$GRF_HOME/conf/ldap.toml" "$BACKUP_DIR/"
   cp -r "$TELEGRAF_HOME/etc/telegraf/telegraf.conf" "$BACKUP_DIR/"
+  cp -r "$TELEGRAF_HOME/etc/telegraf/telegraf.d/opentelemetry.conf" "$BACKUP_DIR/"
+  cp -r "$TELEGRAF_HOME/etc/telegraf/telegraf.d/infra.conf" "$BACKUP_DIR/"
   echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
 }
 
@@ -232,6 +236,10 @@ influxdb_deploy() {
   mv $HOME/apps/tmp/ldap.toml $GRF_HOME/conf/ldap.toml
   curl -fsSL -o $HOME/apps/tmp/telegraf.conf "$INFLUX_REPO/telegraf.conf" && [ -s "$HOME/apps/tmp/telegraf.conf" ] || { echo "Error: Failed to download telegraf.conf or file is empty."; exit 1; }
   mv $HOME/apps/tmp/telegraf.conf $TELEGRAF_HOME/etc/telegraf/telegraf.conf
+  curl -fsSL -o $HOME/apps/tmp/opentelemetry.conf "$INFLUX_REPO/telegraf.d/opentelemetry.conf" && [ -s "$HOME/apps/tmp/opentelemetry.conf" ] || { echo "Error: Failed to download opentelemetry.conf or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/opentelemetry.conf $TELEGRAF_HOME/etc/telegraf/telegraf.d/opentelemetry.conf
+  curl -fsSL -o $HOME/apps/tmp/infra.conf "$INFLUX_REPO/telegraf.d/infra.conf" && [ -s "$HOME/apps/tmp/infra.conf" ] || { echo "Error: Failed to download infra.conf or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/infra.conf $TELEGRAF_HOME/etc/telegraf/telegraf.d/infra.conf
   echo "InfluxDB deployment completed."
 }
 
@@ -242,7 +250,7 @@ kafka_deploy() {
   curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/server.properties "$KAFKA_REPO/server.properties" && [ -s "$HOME/apps/tmp/server.properties" ] || { echo "Error: Failed to download server.properties or file is empty."; exit 1; }
   mv $HOME/apps/tmp/server.properties $KAFKA_HOME/config/server.properties
   curl -fsSL -H "Authorization: Bearer $GITHUB_TOKEN" -o $HOME/apps/tmp/ssl-client.properties "$KAFKA_REPO/ssl-client.properties" && [ -s "$HOME/apps/tmp/ssl-client.properties" ] || { echo "Error: Failed to download ssl-client.properties or file is empty."; exit 1; }
-  mv $HOME/apps/tmp/ssl-client.properties $KAFKA_HOME/config/ssl-client.properties\
+  mv $HOME/apps/tmp/ssl-client.properties $KAFKA_HOME/config/ssl-client.properties
   #Publisher deployment
   #bin files
   mkdir -p $HOME/apps/tmp/publisher/bin
