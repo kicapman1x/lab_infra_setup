@@ -90,6 +90,7 @@ influxdb_rollback() {
   cp -r "$VERSION_DIR/ldap.toml" "$GRF_HOME/conf/"
   cp -r "$VERSION_DIR/opentelemetry.conf" "$TELEGRAF_HOME/etc/telegraf/telegraf.d/"
   cp -r "$VERSION_DIR/infra.conf" "$TELEGRAF_HOME/etc/telegraf/telegraf.d/"
+  cp -r "$VERSION_DIR/k8s.conf" "$TELEGRAF_HOME/etc/telegraf/telegraf.d/"
   echo "InfluxDB rollback to version $ROLLBACK_VERSION completed."
 }
 
@@ -161,6 +162,7 @@ influxdb_backup() {
   cp -r "$TELEGRAF_HOME/etc/telegraf/telegraf.conf" "$BACKUP_DIR/"
   cp -r "$TELEGRAF_HOME/etc/telegraf/telegraf.d/opentelemetry.conf" "$BACKUP_DIR/"
   cp -r "$TELEGRAF_HOME/etc/telegraf/telegraf.d/infra.conf" "$BACKUP_DIR/"
+  cp -r "$TELEGRAF_HOME/etc/telegraf/telegraf.d/k8s.conf" "$BACKUP_DIR/"
   echo "Backup of $APPLICATION_NAME completed at $BACKUP_DIR"
 }
 
@@ -240,6 +242,8 @@ influxdb_deploy() {
   mv $HOME/apps/tmp/opentelemetry.conf $TELEGRAF_HOME/etc/telegraf/telegraf.d/opentelemetry.conf
   curl -fsSL -o $HOME/apps/tmp/infra.conf "$INFLUX_REPO/telegraf.d/infra.conf" && [ -s "$HOME/apps/tmp/infra.conf" ] || { echo "Error: Failed to download infra.conf or file is empty."; exit 1; }
   mv $HOME/apps/tmp/infra.conf $TELEGRAF_HOME/etc/telegraf/telegraf.d/infra.conf
+  curl -fsSL -o $HOME/apps/tmp/k8s.conf "$INFLUX_REPO/telegraf.d/k8s.conf" && [ -s "$HOME/apps/tmp/k8s.conf" ] || { echo "Error: Failed to download k8s.conf or file is empty."; exit 1; }
+  mv $HOME/apps/tmp/k8s.conf $TELEGRAF_HOME/etc/telegraf/telegraf.d/k8s.conf
   echo "InfluxDB deployment completed."
 }
 
