@@ -7,6 +7,8 @@ rules:
   resources:
     - nodes
     - nodes/proxy
+    - nodes/stats
+    - nodes/metrics
     - pods
     - services
     - endpoints

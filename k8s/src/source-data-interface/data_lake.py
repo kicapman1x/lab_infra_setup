@@ -72,7 +72,7 @@ def bootstrap():
 
     #Different metrics 
     publish_exec_time = meter.create_histogram(
-        "source_data_interface.execution_time",
+        "application.execution_time",
         unit="ms",
         description="Time spent unpackaging message, publishing to RMQ"
     )

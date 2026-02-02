@@ -10,6 +10,12 @@ import uuid
 import logging
 import sys
 from datetime import datetime
+from opentelemetry import metrics
+from opentelemetry.sdk.metrics import MeterProvider
+from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
+from opentelemetry.sdk.resources import Resource
+from opentelemetry.exporter.otlp.proto.grpc.metric_exporter import OTLPMetricExporter
+from opentelemetry.semconv.resource import ResourceAttributes
 
 def bootstrap():
     #Environment variables
@@ -31,6 +37,10 @@ def bootstrap():
     logdir = os.environ.get("log_directory", ".")
     loglvl = os.environ.get("log_level", "INFO").upper()
     facial_api_latency= int(os.environ.get("facial_api_latency", "0"))  
+    otel_service_name = "flight-svc"
+    otel_exporter_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
+    otel_exporter_interval = int(os.environ.get("OTEL_EXPORT_INTERVAL"))
+    release_version = os.environ.get("release_version")
 
     #logging 
     log_level = getattr(logging, loglvl, logging.INFO)
@@ -50,6 +60,33 @@ def bootstrap():
 
     logger.addHandler(stdout_handler)
     logger.addHandler(file_handler)
+
+    #OTEL setup
+    resource = Resource.create({
+        "service.name": otel_service_name,
+        "service.version": release_version,
+    })
+
+    metric_reader = PeriodicExportingMetricReader(
+    OTLPMetricExporter(endpoint=otel_exporter_endpoint, insecure=True),
+    export_interval_millis=otel_exporter_interval
+    )
+
+    metrics.set_meter_provider(
+        MeterProvider(
+            resource=resource,
+            metric_readers=[metric_reader],
+        )
+    )
+
+    meter = metrics.get_meter(__name__)
+
+    #Different metrics 
+    publish_exec_time = meter.create_histogram(
+        "application.execution_time",
+        unit="ms",
+        description="Time spent unpackaging message, publishing to RMQ"
+    )
 
 def get_mysql_connection():
     return mysql.connector.connect(
