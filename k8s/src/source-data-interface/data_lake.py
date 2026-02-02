@@ -15,7 +15,7 @@ from opentelemetry.semconv.resource import ResourceAttributes
 
 def bootstrap():
     #Environment variables
-    global payload_dir, tmp_dir, ca_cert, interval, n_flights, n_passengers, logdir, loglvl, output_file, logger, log_level, formatter, stdout_handler, file_handler, meter, publish_exec_time, logger
+    global payload_dir, tmp_dir, ca_cert, interval, n_flights, n_passengers, logdir, loglvl, output_file, logger, log_level, formatter, stdout_handler, file_handler, meter, publish_exec_time, logger, last_exec_time_ms
     payload_dir = os.getenv("PAYLOAD_DIR")
     tmp_dir = os.getenv("TMP_DIR")
     ca_cert= os.environ.get("CA_PATH")
@@ -29,7 +29,7 @@ def bootstrap():
     otel_exporter_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
     otel_exporter_interval = int(os.environ.get("OTEL_EXPORT_INTERVAL"))
     release_version = os.environ.get("release_version")
-
+    last_exec_time_ms = 0.0 
     #logging 
     log_level = getattr(logging, loglvl, logging.INFO)
     logger = logging.getLogger()
@@ -71,10 +71,14 @@ def bootstrap():
     meter = metrics.get_meter(__name__)
 
     #Different metrics 
-    publish_exec_time = meter.create_histogram(
+    def exec_time_callback(options):
+        return [metrics.Observation(last_exec_time_ms)]
+
+    publish_exec_time = meter.create_observable_gauge(
         "application.execution_time",
         unit="ms",
-        description="Time spent unpackaging message, publishing to RMQ"
+        description="Time spent unpackaging message, publishing to RMQ",
+        callbacks=[exec_time_callback]
     )
 
 def load_csv():
@@ -86,6 +90,7 @@ def sample_lake():
     bootstrap()
     logger.info("**********Starting source data publisher**********")
     logger.info("Deleting existing batch payload if any")
+    global last_exec_time_ms
     start = time.perf_counter()
     if os.path.exists(output_file):
         os.remove(output_file)
@@ -141,4 +146,4 @@ def sample_lake():
 
         logger.info(f"Wrote batch payload to {tmp_dir}/batch_payload.csv")
     duration_ms = (time.perf_counter() - start) * 1000
-    publish_exec_time.record(duration_ms)
+    last_exec_time_ms = duration_ms

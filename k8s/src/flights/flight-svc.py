@@ -2,6 +2,7 @@ import json
 import ssl
 import pika
 import os
+import time
 import hmac
 import hashlib
 import base64
@@ -19,7 +20,7 @@ from opentelemetry.semconv.resource import ResourceAttributes
 
 def bootstrap():
     #Environment variables
-    global rmq_url, rmq_port, rmq_username, rmq_password, ca_cert, mysql_url, mysql_port, mysql_user, mysql_password, mysql_db, CONSUME_QUEUE_NAME_PRE_FACIAL, CONSUME_QUEUE_NAME_POST_FACIAL, PRODUCE_QUEUE_NAME_PRE_FACIAL,PRODUCE_QUEUE_NAME_POST_FACIAL, facial_api_latency, logdir, loglvl, logger
+    global rmq_url, rmq_port, rmq_username, rmq_password, ca_cert, mysql_url, mysql_port, mysql_user, mysql_password, mysql_db, CONSUME_QUEUE_NAME_PRE_FACIAL, CONSUME_QUEUE_NAME_POST_FACIAL, PRODUCE_QUEUE_NAME_PRE_FACIAL,PRODUCE_QUEUE_NAME_POST_FACIAL, facial_api_latency, logdir, loglvl, logger, publish_exec_time, last_exec_pre_time_ms, last_exec_post_time_ms
     rmq_url = os.environ.get("RMQ_HOST")
     rmq_port = int(os.environ.get("RMQ_PORT"))
     rmq_username = os.environ.get("RMQ_USER")
@@ -41,6 +42,8 @@ def bootstrap():
     otel_exporter_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
     otel_exporter_interval = int(os.environ.get("OTEL_EXPORT_INTERVAL"))
     release_version = os.environ.get("release_version")
+    last_exec_pre_time_ms = 0.0
+    last_exec_post_time_ms = 0.0
 
     #logging 
     log_level = getattr(logging, loglvl, logging.INFO)
@@ -82,11 +85,25 @@ def bootstrap():
     meter = metrics.get_meter(__name__)
 
     #Different metrics 
-    publish_exec_time = meter.create_histogram(
-        "application.execution_time",
+    def exec_time_callback(options):
+        return [
+            metrics.Observation(
+                last_exec_pre_time_ms,
+                attributes={"stage": "pre"},
+            ),
+            metrics.Observation(
+                last_exec_post_time_ms,
+                attributes={"stage": "post"},
+            ),
+        ]
+
+    publish_exec_time = meter.create_observable_gauge(
+        name="application.execution_time",
         unit="ms",
-        description="Time spent unpackaging message, publishing to RMQ"
+        description="Time spent unpackaging message, publishing to RMQ",
+        callbacks=[exec_time_callback],
     )
+
 
 def get_mysql_connection():
     return mysql.connector.connect(
@@ -130,8 +147,10 @@ def get_rmq_connection():
     return pika.BlockingConnection(params)
 
 def process_message_pre_facial(channel, method, properties, body):
+    global last_exec_pre_time_ms
     conn = get_mysql_connection()
     try:
+        start = time.perf_counter()
         message = json.loads(body)
         logger.info(f"Received message: {message}")
 
@@ -162,7 +181,9 @@ def process_message_pre_facial(channel, method, properties, body):
             )
             logger.info(f"[{trace_id}]  Flight details written and message published.")
             conn.commit()
-        channel.basic_ack(delivery_tag=method.delivery_tag)    
+        channel.basic_ack(delivery_tag=method.delivery_tag)  
+        duration_ms = (time.perf_counter() - start) * 1000
+        last_exec_pre_time_ms = duration_ms
     except Exception as e:
         logger.error(f"Error processing message: {e}")
         channel.basic_nack(
@@ -172,8 +193,10 @@ def process_message_pre_facial(channel, method, properties, body):
     conn.close()
 
 def process_message_post_facial(channel, method, properties, body):
+    global last_exec_post_time_ms
     conn = get_mysql_connection()
     try:
+        start = time.perf_counter()
         message = json.loads(body)
         p_key = message["passenger_key"]
         trace_id = message["trace_id"]
@@ -205,7 +228,9 @@ def process_message_post_facial(channel, method, properties, body):
             conn.commit()
         else:
             logger.error(f"Passenger does not exist : {p_key} - cannot fetch flight details.")
-        channel.basic_ack(delivery_tag=method.delivery_tag)    
+        channel.basic_ack(delivery_tag=method.delivery_tag)
+        duration_ms = (time.perf_counter() - start) * 1000
+        last_exec_post_time_ms = duration_ms    
     except Exception as e:
         logger.error(f"Error processing message: {e}")
         channel.basic_nack(

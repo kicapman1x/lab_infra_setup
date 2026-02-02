@@ -1,4 +1,5 @@
 import json
+import time
 import ssl
 import pika
 import os
@@ -22,7 +23,7 @@ from opentelemetry.semconv.resource import ResourceAttributes
 
 def bootstrap():
     #Environment variables
-    global facial_dir, facial_api, rmq_url, rmq_port, rmq_username, rmq_password, ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, CONSUME_QUEUE_NAME, logdir, loglvl, mysql_db_s3, logger
+    global facial_dir, facial_api, rmq_url, rmq_port, rmq_username, rmq_password, ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, CONSUME_QUEUE_NAME, logdir, loglvl, mysql_db_s3, logger, publish_exec_time, last_exec_time_ms
     facial_dir = os.environ.get("FACIAL_DIR")
     facial_api = os.environ.get("image_gen_api")
     rmq_url = os.environ.get("RMQ_HOST")
@@ -43,6 +44,7 @@ def bootstrap():
     otel_exporter_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
     otel_exporter_interval = int(os.environ.get("OTEL_EXPORT_INTERVAL"))
     release_version = os.environ.get("release_version")
+    last_exec_time_ms = 0.0
 
     #Logging setup
     log_level = getattr(logging, loglvl, logging.INFO)
@@ -84,10 +86,14 @@ def bootstrap():
     meter = metrics.get_meter(__name__)
 
     #Different metrics 
-    publish_exec_time = meter.create_histogram(
+    def exec_time_callback(options):
+        return [metrics.Observation(last_exec_time_ms)]
+
+    publish_exec_time = meter.create_observable_gauge(
         "application.execution_time",
         unit="ms",
-        description="Time spent unpackaging message, publishing to RMQ"
+        description="Time spent unpackaging message, publishing to RMQ",
+        callbacks=[exec_time_callback]
     )
 
 
@@ -133,9 +139,10 @@ def get_mysql_connection_s3():
     )
 
 def process_message(ch, method, properties, body):
-    global conn_s3
+    global conn_s3, last_exec_time_ms
     conn_s3 = get_mysql_connection_s3()
     try:
+        start = time.perf_counter()
         message = json.loads(body)
         logger.info("Received message for satellite 3")
 
@@ -156,6 +163,8 @@ def process_message(ch, method, properties, body):
         )
         conn_s3.commit()
         logger.info(f"[{trace_id}] Successfully commited data for passenger: {p_key} into satellite 3 database.")
+        duration_ms = (time.perf_counter() - start) * 1000
+        last_exec_time_ms = duration_ms
     except Exception as e:
         logger.error(f"Error processing message: {e}")
         channel.basic_nack(

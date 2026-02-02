@@ -5,6 +5,7 @@ import pika
 import os
 import hmac
 import hashlib
+import time
 import base64
 import mysql.connector
 import uuid
@@ -18,7 +19,7 @@ from opentelemetry.semconv.resource import ResourceAttributes
 
 def bootstrap():
     #Environment variables
-    global rmq_url, rmq_port, rmq_username, rmq_password, ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, mysql_db, CONSUME_QUEUE_NAME, PRODUCE_QUEUE_NAME, logdir, loglvl, logger
+    global rmq_url, rmq_port, rmq_username, rmq_password, ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, mysql_db, CONSUME_QUEUE_NAME, PRODUCE_QUEUE_NAME, logdir, loglvl, logger, publish_exec_time, last_exec_time_ms
     rmq_url = os.environ.get("RMQ_HOST")
     rmq_port = int(os.environ.get("RMQ_PORT"))
     rmq_username = os.environ.get("RMQ_USER")
@@ -38,6 +39,7 @@ def bootstrap():
     otel_exporter_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
     otel_exporter_interval = int(os.environ.get("OTEL_EXPORT_INTERVAL"))
     release_version = os.environ.get("release_version")
+    last_exec_time_ms = 0.0
 
     #logging 
     log_level = getattr(logging, loglvl, logging.INFO)
@@ -79,10 +81,14 @@ def bootstrap():
     meter = metrics.get_meter(__name__)
 
     #Different metrics 
-    publish_exec_time = meter.create_histogram(
+    def exec_time_callback(options):
+        return [metrics.Observation(last_exec_time_ms)]
+
+    publish_exec_time = meter.create_observable_gauge(
         "application.execution_time",
         unit="ms",
-        description="Time spent unpackaging message, publishing to RMQ"
+        description="Time spent unpackaging message, publishing to RMQ",
+        callbacks=[exec_time_callback]
     )
 
 def get_rmq_connection():
@@ -127,7 +133,9 @@ def get_mysql_connection():
     )
 
 def process_message(channel, method, properties, body):
+    global last_exec_time_ms
     try:
+        start = time.perf_counter()
         message = json.loads(body)
         logger.info(f"Received message: {message}")
 
@@ -149,6 +157,8 @@ def process_message(channel, method, properties, body):
                 )
             )
             logger.info(f"[{trace_id}] Passenger details written and message published.")
+            duration_ms = (time.perf_counter() - start) * 1000
+            last_exec_time_ms = duration_ms
         else:
             logger.info(f"[{trace_id}] Passenger details not written - On to next message!")    
         channel.basic_ack(delivery_tag=method.delivery_tag)

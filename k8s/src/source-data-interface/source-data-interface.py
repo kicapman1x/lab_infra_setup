@@ -17,7 +17,7 @@ from opentelemetry.semconv.resource import ResourceAttributes
 
 def bootstrap():
     #Environment variables
-    global tmp_dir, ca_cert, rmq_url, rmq_port, rmq_username, rmq_password, interval, QUEUE_NAME, PUBLISH_INTERVAL, n_flights, n_passengers, logdir, loglvl, logger, log_level, formatter, stdout_handler, file_handler, meter, publish_exec_time
+    global tmp_dir, ca_cert, rmq_url, rmq_port, rmq_username, rmq_password, interval, QUEUE_NAME, PUBLISH_INTERVAL, n_flights, n_passengers, logdir, loglvl, logger, log_level, formatter, stdout_handler, file_handler, meter, publish_exec_time, last_exec_time_ms
     tmp_dir = os.getenv("TMP_DIR")
     ca_cert= os.environ.get("CA_PATH")
     rmq_url = os.environ.get("RMQ_HOST")
@@ -34,6 +34,7 @@ def bootstrap():
     otel_exporter_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
     otel_exporter_interval = int(os.environ.get("OTEL_EXPORT_INTERVAL"))
     release_version = os.environ.get("release_version")
+    last_exec_time_ms = 0.0
 
     #logging 
     log_level = getattr(logging, loglvl, logging.INFO)
@@ -75,10 +76,14 @@ def bootstrap():
     meter = metrics.get_meter(__name__)
 
     #Different metrics 
-    publish_exec_time = meter.create_histogram(
+    def exec_time_callback(options):
+        return [metrics.Observation(last_exec_time_ms)]
+
+    publish_exec_time = meter.create_observable_gauge(
         "application.execution_time",
         unit="ms",
-        description="Time spent unpackaging message, publishing to RMQ"
+        description="Time spent unpackaging message, publishing to RMQ",
+        callbacks=[exec_time_callback]
     )
 
 def get_rmq_connection():
@@ -121,6 +126,7 @@ def main():
     channel = connection.channel()
     logger.info(f"Declaring queue {QUEUE_NAME}")
     channel.queue_declare(queue=QUEUE_NAME, durable=True)
+    global last_exec_time_ms
     try:
         while True:
             logger.info(f"Loading payloads from {tmp_dir}/batch_payload.csv")
@@ -163,7 +169,7 @@ def main():
                     f.write(json.dumps(row) + "\n")
 
                 duration_ms = (time.perf_counter() - start) * 1000
-                publish_exec_time.record(duration_ms)
+                last_exec_time_ms = duration_ms
                 
                 time.sleep(PUBLISH_INTERVAL)
     except KeyboardInterrupt:

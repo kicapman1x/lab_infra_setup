@@ -25,7 +25,7 @@ from opentelemetry.semconv.resource import ResourceAttributes
 
 def bootstrap():
     #Environment variables
-    global ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, mysql_db, logdir, loglvl, mysql_db_s1, mysql_db_s2, mysql_db_s3, check_in_interval, delete_orchestrator_interval, logger
+    global ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, mysql_db, logdir, loglvl, mysql_db_s1, mysql_db_s2, mysql_db_s3, check_in_interval, delete_orchestrator_interval, logger, publish_exec_time, last_exec_time_ms
     ca_cert = os.environ.get("CA_PATH")
     mysql_url = os.environ.get("MYSQL_HOST")
     mysql_port = int(os.environ.get("MYSQL_PORT"))
@@ -43,6 +43,7 @@ def bootstrap():
     otel_exporter_endpoint = os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT")
     otel_exporter_interval = int(os.environ.get("OTEL_EXPORT_INTERVAL"))
     release_version = os.environ.get("release_version")
+    last_exec_time_ms = 0.0
 
     #Logging setup
     log_level = getattr(logging, loglvl, logging.INFO)
@@ -84,10 +85,14 @@ def bootstrap():
     meter = metrics.get_meter(__name__)
 
     #Different metrics 
-    publish_exec_time = meter.create_histogram(
+    def exec_time_callback(options):
+        return [metrics.Observation(last_exec_time_ms)]
+
+    publish_exec_time = meter.create_observable_gauge(
         "application.execution_time",
         unit="ms",
-        description="Time spent unpackaging message, publishing to RMQ"
+        description="Time spent unpackaging message, publishing to RMQ",
+        callbacks=[exec_time_callback]
     )
 
 def get_mysql_connection():
@@ -225,7 +230,9 @@ def satellite_delete():
     logger.info("Deleted orphaned records from satellite databases.")
 
 def houskeep_orchestrator():
+    global last_exec_time_ms
     while True:
+        start = time.perf_counter()
         flights_delete()
         satellite_delete()
         facial_n_passenger_delete()
@@ -233,6 +240,8 @@ def houskeep_orchestrator():
         #create temp table and load the list of file names (which is p_keys) and remove the .b64 string from the names. 
         #perform left join and see which is missing
         #do an os remove on those files
+        duration_ms = (time.perf_counter() - start) * 1000
+        last_exec_time_ms = duration_ms
         time.sleep(delete_orchestrator_interval)
 
 def main():
