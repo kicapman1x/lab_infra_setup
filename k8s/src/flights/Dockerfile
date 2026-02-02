@@ -10,4 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY flight-svc.py ./
 
-CMD ["python", "flight-svc.py"]
+ENTRYPOINT ["opentelemetry-instrument"]
+CMD ["python", "-u", "flight-svc.py"]

@@ -10,4 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY satellite1.py ./
 
-CMD ["python", "satellite1.py"]
+ENTRYPOINT ["opentelemetry-instrument"]
+CMD ["python", "-u", "satellite1.py"]

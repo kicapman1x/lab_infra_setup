@@ -10,4 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY data_lake.py housekeep.py ./
 
-CMD ["python", "housekeep.py"]
+ENTRYPOINT ["opentelemetry-instrument"]
+CMD ["python", "-u", "housekeep.py"]

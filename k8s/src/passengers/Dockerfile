@@ -10,4 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY passenger-svc.py ./
 
-CMD ["python", "passenger-svc.py"]
+ENTRYPOINT ["opentelemetry-instrument"]
+CMD ["python", "-u", "passenger-svc.py"]

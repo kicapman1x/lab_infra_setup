@@ -10,4 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY facial-svc.py ./
 
-CMD ["python", "facial-svc.py"]
+ENTRYPOINT ["opentelemetry-instrument"]
+CMD ["python", "-u", "facial-svc.py"]

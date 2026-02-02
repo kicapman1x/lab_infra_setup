@@ -56,7 +56,7 @@ def bootstrap():
     stdout_handler.setLevel(log_level)
     stdout_handler.setFormatter(formatter)
 
-    file_handler = logging.FileHandler(f'{logdir}/satellite1.log')
+    file_handler = logging.FileHandler(f'{logdir}/satellite2.log')
     file_handler.setLevel(log_level)
     file_handler.setFormatter(formatter)
 

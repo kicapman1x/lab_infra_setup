@@ -13,6 +13,7 @@ import requests
 import gzip
 from datetime import datetime
 import sys
+from opentelemetry import metrics
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
 from opentelemetry.sdk.resources import Resource
@@ -55,7 +56,7 @@ def bootstrap():
     stdout_handler.setLevel(log_level)
     stdout_handler.setFormatter(formatter)
 
-    file_handler = logging.FileHandler(f'{logdir}/satellite1.log')
+    file_handler = logging.FileHandler(f'{logdir}/satellite3.log')
     file_handler.setLevel(log_level)
     file_handler.setFormatter(formatter)
 

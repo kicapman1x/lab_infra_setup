@@ -10,4 +10,5 @@ RUN pip install --no-cache-dir -r requirements.txt
 
 COPY data_lake.py satellite-interface.py ./
 
-CMD ["python", "satellite-interface.py"]
+ENTRYPOINT ["opentelemetry-instrument"]
+CMD ["python", "-u", "satellite-interface.py"]
