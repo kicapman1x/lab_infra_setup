@@ -8,3 +8,4 @@ opentelemetry-exporter-otlp==1.39.1
 opentelemetry-instrumentation==0.60b1
 opentelemetry-instrumentation-requests==0.60b1
 opentelemetry-instrumentation-pika==0.60b1
+confluent-kafka==2.12.2

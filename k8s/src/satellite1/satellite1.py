@@ -13,6 +13,7 @@ import requests
 import gzip
 from datetime import datetime
 import sys
+from confluent_kafka import Consumer
 from opentelemetry import metrics
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
@@ -22,21 +23,24 @@ from opentelemetry.semconv.resource import ResourceAttributes
 
 def bootstrap():
     #Environment variables
-    global facial_dir, facial_api, rmq_url, rmq_port, rmq_username, rmq_password, ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, CONSUME_QUEUE_NAME, logdir, loglvl, mysql_db_s1, logger, publish_exec_time, last_exec_time_ms
+    global facial_dir, facial_api, rmq_url, rmq_port, rmq_username, rmq_password, ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, CONSUME_TOPIC_NAME, logdir, loglvl, mysql_db_s1, logger, publish_exec_time, last_exec_time_ms, kafka_url, cert_file, key_file
     facial_dir = os.environ.get("FACIAL_DIR")
     facial_api = os.environ.get("image_gen_api")
     rmq_url = os.environ.get("RMQ_HOST")
     rmq_port = int(os.environ.get("RMQ_PORT"))
     rmq_username = os.environ.get("RMQ_USER")
     rmq_password = os.environ.get("RMQ_PW")
+    kafka_url = os.environ.get("KAFKA_HOST")
     ca_cert = os.environ.get("CA_PATH")
+    cert_file = os.environ.get("CERT_PATH")
+    key_file = os.environ.get("KEY_PATH")
     secret_key = os.environ.get("HMAC_KEY").encode("utf-8")
     mysql_url = os.environ.get("MYSQL_HOST")
     mysql_port = int(os.environ.get("MYSQL_PORT"))
     mysql_user = os.environ.get("MYSQL_USER")
     mysql_password = os.environ.get("MYSQL_PW")
     mysql_db_s1 = os.environ.get("MYSQL_DB_SATELLITE1")
-    CONSUME_QUEUE_NAME = "ingest_facial_data_s1"
+    CONSUME_TOPIC_NAME = "ingest_facial_data_s1"
     logdir = os.environ.get("log_directory", ".")
     loglvl = os.environ.get("log_level", "INFO").upper()
     otel_service_name = "satellite1"
@@ -95,31 +99,19 @@ def bootstrap():
         callbacks=[exec_time_callback]
     )
 
-def get_rmq_connection():
-    credentials = pika.PlainCredentials(
-        rmq_username,
-        rmq_password
-    )
-
-    ssl_context = ssl.create_default_context(cafile=ca_cert)
-    ssl_context.check_hostname = True
-    ssl_context.verify_mode = ssl.CERT_REQUIRED
-
-    ssl_options = pika.SSLOptions(
-        context=ssl_context,
-        server_hostname=rmq_url
-    )
-
-    params = pika.ConnectionParameters(
-        host=rmq_url,
-        port=rmq_port,
-        credentials=credentials,
-        ssl_options=ssl_options,
-        heartbeat=60,
-        blocked_connection_timeout=30
-    )
-
-    return pika.BlockingConnection(params)
+def get_kafka_consumer():
+    conf = {
+        'bootstrap.servers': kafka_url,
+        'security.protocol': 'SSL',
+        'ssl.ca.location': ca_cert,
+        "ssl.certificate.location": cert_file,
+        "ssl.key.location": key_file,
+        'group.id': 'satellite1_group',
+        'auto.offset.reset': 'earliest',
+        'enable.auto.commit': False,
+        'max.poll.interval.ms': 300000
+    }
+    return Consumer(conf)
 
 def get_mysql_connection_s1():
     return mysql.connector.connect(
@@ -136,12 +128,12 @@ def get_mysql_connection_s1():
         autocommit=False
     )
 
-def process_message(ch, method, properties, body):
+def process_message(msg):
     global conn_s1, last_exec_time_ms
     conn_s1 = get_mysql_connection_s1()
     try:
         start = time.perf_counter()
-        message = json.loads(body)
+        message = json.loads(msg.value().decode('utf-8'))
         logger.info("Received message for satellite 1")
 
         p_key = message["passenger_key"]
@@ -165,12 +157,8 @@ def process_message(ch, method, properties, body):
         last_exec_time_ms = duration_ms
     except Exception as e:
         logger.error(f"Error processing message: {e}")
-        channel.basic_nack(
-            delivery_tag=method.delivery_tag,
-            requeue=True
-        )
+        raise
     finally:
-        ch.basic_ack(delivery_tag=method.delivery_tag)
         conn_s1.close()
 
 def insert_full_data_satellite1(conn, passenger_key, trace_id, facial_image, departure_date, arrival_airport):
@@ -186,32 +174,23 @@ def main():
     bootstrap()
     logger.info("**********Starting satellite1 service**********")
 
-    logger.info("Starting SSL RabbitMQ consumer...")
-    global connection, channel 
-    connection = get_rmq_connection()
-    channel = connection.channel()
-
-    logger.info(f"Declaring queue {CONSUME_QUEUE_NAME}")
-    channel.queue_declare(queue=CONSUME_QUEUE_NAME, durable=True)
-    channel.basic_qos(prefetch_count=1)
-
-    logger.info(f"Consuming messages from {CONSUME_QUEUE_NAME}")
-    channel.basic_consume(
-        queue=CONSUME_QUEUE_NAME,
-        on_message_callback=process_message,
-        auto_ack=False
-    )
-
+    logger.info("Starting SSL Kafka consumer...")
+    global consumer
+    consumer = get_kafka_consumer()
+    consumer.subscribe([CONSUME_TOPIC_NAME])
     try:
-        logger.info("Waiting for messages. Ctrl+C to exit.")
-        channel.start_consuming()
-
+        while True:
+            msg = consumer.poll(1.0)
+            if msg is None:
+                continue
+            if msg.error():
+                logger.error(f"Consumer error: {msg.error()}")
+                continue
+            process_message(msg)
     except KeyboardInterrupt:
-        logger.info("Stopping consumer...")
+        logger.info("Shutting down satellite1 service")
     finally:
-        channel.stop_consuming()
-        connection.close()
-
+        consumer.close()
 
 if __name__ == "__main__":
     main()

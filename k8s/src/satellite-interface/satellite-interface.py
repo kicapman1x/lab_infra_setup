@@ -13,6 +13,7 @@ import logging
 import gzip
 from datetime import datetime
 import random
+from confluent_kafka import Producer
 from opentelemetry import metrics
 from opentelemetry.sdk.metrics import MeterProvider
 from opentelemetry.sdk.metrics.export import PeriodicExportingMetricReader
@@ -22,14 +23,17 @@ from opentelemetry.semconv.resource import ResourceAttributes
 
 def bootstrap():
     #Environment variables
-    global facial_dir, facial_api, rmq_url, rmq_port, rmq_username, rmq_password, ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, mysql_db, CONSUME_QUEUE_NAME, PRODUCE_QUEUE_NAME, logdir, loglvl, mysql_db_s1, mysql_db_s2, mysql_db_s3, logger, publish_exec_time, last_exec_time_ms
+    global facial_dir, facial_api, rmq_url, rmq_port, rmq_username, rmq_password, ca_cert, secret_key, mysql_url, mysql_port, mysql_user, mysql_password, mysql_db, CONSUME_QUEUE_NAME, PRODUCE_TOPIC_NAME, logdir, loglvl, mysql_db_s1, mysql_db_s2, mysql_db_s3, logger, publish_exec_time, last_exec_time_ms, kafka_url, cert_file, key_file
     facial_dir = os.environ.get("FACIAL_DIR")
     facial_api = os.environ.get("image_gen_api")
     rmq_url = os.environ.get("RMQ_HOST")
     rmq_port = int(os.environ.get("RMQ_PORT"))
     rmq_username = os.environ.get("RMQ_USER")
     rmq_password = os.environ.get("RMQ_PW")
+    kafka_url = os.environ.get("KAFKA_HOST")
     ca_cert = os.environ.get("CA_PATH")
+    cert_file = os.environ.get("CERT_PATH")
+    key_file = os.environ.get("KEY_PATH")
     secret_key = os.environ.get("HMAC_KEY").encode("utf-8")
     mysql_url = os.environ.get("MYSQL_HOST")
     mysql_port = int(os.environ.get("MYSQL_PORT"))
@@ -40,7 +44,7 @@ def bootstrap():
     mysql_db_s2 = os.environ.get("MYSQL_DB_SATELLITE2")
     mysql_db_s3 = os.environ.get("MYSQL_DB_SATELLITE3")
     CONSUME_QUEUE_NAME = "upd_facial_data_flight"
-    PRODUCE_QUEUE_NAME = "ingest_facial_data_"
+    PRODUCE_TOPIC_NAME = "ingest_facial_data_"
     logdir = os.environ.get("log_directory", ".")
     loglvl = os.environ.get("log_level", "INFO").upper()
     otel_service_name = "satellite-interface"
@@ -125,6 +129,16 @@ def get_rmq_connection():
 
     return pika.BlockingConnection(params)
 
+def get_kafka_producer():
+    conf = {
+        'bootstrap.servers': kafka_url,
+        'security.protocol': 'SSL',
+        'ssl.ca.location': ca_cert,
+        "ssl.certificate.location": cert_file,
+        "ssl.key.location": key_file
+    }
+    return Producer(conf)
+
 def get_mysql_connection():
     return mysql.connector.connect(
         host=mysql_url,
@@ -186,11 +200,12 @@ def get_mysql_connection_s3():
     )
 
 def process_message(channel, method, properties, body):
-    global conn, conn_s1, conn_s2, conn_s3, last_exec_time_ms
+    global conn, conn_s1, conn_s2, conn_s3, last_exec_time_ms, kafka_producer_conn
     conn = get_mysql_connection()
     conn_s1 = get_mysql_connection_s1()
     conn_s2 = get_mysql_connection_s2()
     conn_s3 = get_mysql_connection_s3()
+    kafka_producer_conn = get_kafka_producer()
     try:
         start = time.perf_counter()
         message = json.loads(body)
@@ -216,8 +231,7 @@ def process_message(channel, method, properties, body):
             trace_id = message["trace_id"]
             logger.info(f"[{trace_id}] Ingesting data for passenger: {p_key} with trace ID: {trace_id}")
 
-            logger.info(f"[{trace_id}] Publishing facial details to {PRODUCE_QUEUE_NAME}{selected_satellite}")
-            channel.queue_declare(queue=PRODUCE_QUEUE_NAME + selected_satellite, durable=True)
+            logger.info(f"[{trace_id}] Publishing facial details to {PRODUCE_TOPIC_NAME}{selected_satellite}")
             message_push = {
                 "passenger_key": message["passenger_key"],
                 "trace_id": trace_id,
@@ -226,18 +240,15 @@ def process_message(channel, method, properties, body):
                 "arrival_airport": arrival_airport
             }
             body = json.dumps(message_push)
-            channel.basic_publish(
-                exchange="",
-                routing_key=PRODUCE_QUEUE_NAME+selected_satellite,
-                body=body,
-                properties=pika.BasicProperties(
-                    delivery_mode=2
-                )
+            kafka_producer_conn.produce(
+                topic=PRODUCE_TOPIC_NAME + selected_satellite,
+                value=body
             )
+            kafka_producer_conn.flush()
             logger.info("Facial details written and message published.")
             duration_ms = (time.perf_counter() - start) * 1000
             last_exec_time_ms = duration_ms
-        channel.basic_ack(delivery_tag=method.delivery_tag)    
+        channel.basic_ack(delivery_tag=method.delivery_tag)   
     except Exception as e:
         logger.error(f"Error processing message: {e}")
         channel.basic_nack(
