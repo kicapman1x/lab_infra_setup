@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y ca-certificates \
 COPY requirements.txt .
 RUN python -m pip install --no-cache-dir -r requirements.txt
 
-COPY data_lake.py satellite-interface.py ./
+COPY satellite-interface.py ./
 
 ENTRYPOINT ["opentelemetry-instrument"]
 CMD ["python", "-u", "satellite-interface.py"]

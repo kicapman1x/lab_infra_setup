@@ -8,7 +8,7 @@ RUN apt-get update && apt-get install -y ca-certificates \
 COPY requirements.txt .
 RUN python -m pip install --no-cache-dir -r requirements.txt
 
-COPY data_lake.py housekeep.py ./
+COPY housekeep.py ./
 
 ENTRYPOINT ["opentelemetry-instrument"]
 CMD ["python", "-u", "housekeep.py"]
